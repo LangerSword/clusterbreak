@@ -13,6 +13,7 @@
 - **08:41** — Submission form not visible on the event site yet (nav shows only "Check in"); re-check before end of day.
 - **09:59–10:17** — **Interactive 3D rig builder live**: place devices on the 3D grid board (palette → board), drag/snap to cells, wire nodes into pipelines (link mode), live decode + pipeline estimates with fit verdicts per node and for the rig as a whole. Engine gained the pipeline estimator — anchors A3 (3090×2 → 108.07 tok/s) and A4 (70B ×2 → 16.29) now covered, **25/25 engine tests**. Frontend rig logic covered by 9 unit tests.
 - **10:15** — Deployed-site verification (scripted browser, software GL): WebGL renders, three nodes placed with correct estimates (RTX 3090 + Llama-3.1-8B Q4_K_M → 111.7 tok/s = anchor A1), model/quant/context switches recompute live, **zero console errors**. Screenshot: `/tmp/cb-shot.png`.
+- **10:22** — Interaction verification on the deployed bundle: LINK MODE wires two nodes and the pipeline estimate appears ("pipelined across 2 nodes · 1 GbE assumed"); dragging a node moves it across cells; zero console errors through the whole sequence. Screenshot: `/tmp/cb-shot2.png`.
 
 ## Learnings (kept for the writeup)
 
