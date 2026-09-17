@@ -29,6 +29,8 @@ export interface Model {
   activeParamsB: number;
   layers: number;
   attentionHeads: number;
+  /** Hidden size (model dimension) — activation vector width. */
+  hiddenSize: number;
   kvHeads: number;
   headDim: number;
   /** Published GGUF file sizes in decimal GB; null = no verified size. */

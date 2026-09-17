@@ -1,5 +1,18 @@
 :root {
   color-scheme: dark;
+  --bg: #0b0d10;
+  --panel: #0f1216;
+  --panel-2: #12161b;
+  --line: #1d242c;
+  --line-2: #26303b;
+  --text: #e8e6e3;
+  --dim: #98a0aa;
+  --dim-2: #5e6670;
+  --accent: #9fd0ff;
+  --ok: #57d38c;
+  --warn: #e0b341;
+  --bad: #e05c5c;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
 * {
@@ -14,11 +27,300 @@ body,
 
 body {
   margin: 0;
-  background: #0b0d10;
-  color: #e8e6e3;
+  background: var(--bg);
+  color: var(--text);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
     sans-serif;
+  font-size: 14px;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: 54px 1fr;
+  height: 100%;
+}
+
+/* ---------- top bar ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  min-width: 0;
+}
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+.brand-name {
+  letter-spacing: 0.32em;
+  font-weight: 700;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.brand-tag {
+  color: var(--dim-2);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-wrap: nowrap;
+}
+.controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  color: var(--dim);
+}
+select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 0.78rem;
+  max-width: 230px;
+}
+button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease;
+}
+button:hover {
+  border-color: var(--line-2);
+}
+button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.counts {
+  color: var(--dim-2);
+  font-size: 0.7rem;
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+/* ---------- layout ---------- */
+.main {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr) 310px;
+  min-height: 0;
+}
+.canvas-wrap {
+  position: relative;
+  min-width: 0;
+}
+.canvas-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  color: var(--dim-2);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  background: rgba(11, 13, 16, 0.72);
+  border: 1px solid var(--line);
+  padding: 5px 10px;
+  border-radius: 999px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ---------- palette ---------- */
+.palette {
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  overflow-y: auto;
+  padding: 14px 12px;
+}
+.palette h2 {
+  font-size: 0.64rem;
+  letter-spacing: 0.22em;
+  color: var(--dim-2);
+  margin: 4px 0 8px;
+}
+.palette h3 {
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  color: var(--dim);
+  margin: 14px 0 6px;
+}
+.hint {
+  color: var(--dim-2);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  margin: 0 0 6px;
+}
+.note {
+  color: var(--dim-2);
+  font-size: 0.66rem;
+  line-height: 1.5;
+  margin: 8px 0 0;
+}
+.note a {
+  color: var(--dim);
+}
+.device-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.dc-name {
+  display: block;
+  font-size: 0.78rem;
+  letter-spacing: 0;
+}
+.dc-spec {
+  display: block;
+  margin-top: 2px;
+  color: var(--dim-2);
+  font-size: 0.64rem;
+  font-family: var(--mono);
+}
+
+/* ---------- 3D node labels ---------- */
+.node-html {
+  pointer-events: none;
+}
+.node-label {
+  min-width: 128px;
+  background: rgba(15, 18, 22, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  text-align: center;
+  backdrop-filter: blur(4px);
+}
+.nl-name {
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+.nl-spec {
+  margin-top: 2px;
+  color: var(--dim-2);
+  font-size: 0.6rem;
+  font-family: var(--mono);
+}
+.nl-tps {
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--ok);
+}
+.node-label.fit-tight .nl-tps {
+  color: var(--warn);
+}
+.node-label.fit-bad .nl-tps {
+  color: var(--bad);
+}
+
+/* ---------- inspector ---------- */
+.inspector {
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  overflow-y: auto;
+  padding: 14px 12px;
+}
+.inspector section {
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.inspector section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+.inspector h2 {
+  font-size: 0.64rem;
+  letter-spacing: 0.22em;
+  color: var(--dim-2);
+  margin: 2px 0 10px;
+}
+.kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 0.76rem;
+}
+.kv span {
+  color: var(--dim);
+}
+.kv b {
+  font-weight: 500;
+  font-family: var(--mono);
+}
+.verdict {
+  margin: 10px 0 0;
+  padding: 5px 9px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  border: 1px solid var(--line);
+  display: inline-block;
+}
+.verdict.comfortable {
+  color: var(--ok);
+  border-color: rgba(87, 211, 140, 0.35);
+}
+.verdict.tight {
+  color: var(--warn);
+  border-color: rgba(224, 179, 65, 0.35);
+}
+.verdict.does_not_fit {
+  color: var(--bad);
+  border-color: rgba(224, 92, 92, 0.35);
+}
+.metric {
+  margin: 10px 0 0;
+}
+.metric-num {
+  font-family: var(--mono);
+  font-size: 1.5rem;
+  color: var(--text);
+}
+.metric-unit {
+  display: block;
+  margin-top: 2px;
+  color: var(--dim-2);
+  font-size: 0.66rem;
+  line-height: 1.5;
+}
+.link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 0.74rem;
+}
+.link-row button {
+  padding: 2px 8px;
+  font-size: 0.7rem;
 }
