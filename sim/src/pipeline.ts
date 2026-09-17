@@ -3,15 +3,17 @@ import { kvBytesPerToken, weightsBytes } from "./decode";
 import { DEFAULT_DECODE_EFFICIENCY } from "./data/devices";
 
 /**
- * Naive pipeline-parallel estimate (v0).
+ * Pipeline-parallel estimate (v0).
  *
  * Weights (and the KV traffic each stage reads) are split across the pipeline
  * proportional to each device's usable memory; per token every stage reads its
- * own share over its own bandwidth, and one activation vector per hop crosses
- * the link between consecutive stages. This deliberately simple model already
- * lands inside the published multi-node anchors' tolerance bands (see tests);
- * the network/interconnect refinement lands in a later iteration.
+ * own share over its own bandwidth, and one fp16 activation vector per hop
+ * crosses the link between consecutive stages. Deliberately simple, and it
+ * lands inside the published multi-node anchors' tolerance bands (see tests).
  */
+
+/** Conservative default: a 1 GbE-class link between stages. */
+export const DEFAULT_LINK_GBPS = 1;
 
 export interface PipelineStage {
   deviceId: string;
@@ -19,25 +21,24 @@ export interface PipelineStage {
   stageTimeMs: number;
 }
 
-export interface PipelineEstimate {
-  tokensPerSec: number;
+export interface PipelineBreakdown {
   stages: PipelineStage[];
   transferMs: number;
   totalMs: number;
-  linkBandwidthGbps: number;
-  assumptions: string;
 }
 
-/** Conservative v0 assumption: a 1 GbE-class link between stages. */
-export const DEFAULT_LINK_BANDWIDTH_GBPS = 1;
-
-export function estimatePipeline(
+/**
+ * Core pipeline math with per-hop link speeds. `hopGbps[i]` is the speed of
+ * the link between device i and device i+1 (missing entries fall back to
+ * DEFAULT_LINK_GBPS).
+ */
+export function pipelineBreakdown(
   devices: Device[],
   model: Model,
   quant: Quant,
   contextTokens: number,
-  linkBandwidthGbps = DEFAULT_LINK_BANDWIDTH_GBPS,
-): PipelineEstimate {
+  hopGbps: number[],
+): PipelineBreakdown {
   if (devices.length === 0) throw new Error("pipeline needs at least one device");
   const wb = weightsBytes(model, quant);
   if (wb == null) {
@@ -62,10 +63,40 @@ export function estimatePipeline(
 
   const activationBytes = model.hiddenSize * 2; // fp16 hidden state per token per hop
   const hops = devices.length - 1;
-  const linkBytesPerSec = (linkBandwidthGbps * 1e9) / 8;
-  const transferMs = ((activationBytes * hops) / linkBytesPerSec) * 1000;
+  let transferMs = 0;
+  for (let i = 0; i < hops; i++) {
+    const gbps = hopGbps[i] ?? DEFAULT_LINK_GBPS;
+    transferMs += (activationBytes / ((gbps * 1e9) / 8)) * 1000;
+  }
 
   const totalMs = stages.reduce((a, s) => a + s.stageTimeMs, 0) + transferMs;
+  return { stages, transferMs, totalMs };
+}
+
+export interface PipelineEstimate {
+  tokensPerSec: number;
+  stages: PipelineStage[];
+  transferMs: number;
+  totalMs: number;
+  linkBandwidthGbps: number;
+  assumptions: string;
+}
+
+export function estimatePipeline(
+  devices: Device[],
+  model: Model,
+  quant: Quant,
+  contextTokens: number,
+  linkBandwidthGbps = DEFAULT_LINK_GBPS,
+): PipelineEstimate {
+  const hops = Math.max(devices.length - 1, 0);
+  const { stages, transferMs, totalMs } = pipelineBreakdown(
+    devices,
+    model,
+    quant,
+    contextTokens,
+    Array.from({ length: hops }, () => linkBandwidthGbps),
+  );
   return {
     tokensPerSec: 1000 / totalMs,
     stages,

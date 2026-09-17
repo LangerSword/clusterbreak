@@ -39,7 +39,7 @@ body {
 
 .app {
   display: grid;
-  grid-template-rows: 54px 1fr;
+  grid-template-rows: 54px auto 1fr;
   height: 100%;
 }
 
@@ -323,4 +323,202 @@ button.active {
 .link-row button {
   padding: 2px 8px;
   font-size: 0.7rem;
+}
+
+/* ---------- run mode ---------- */
+.runbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 7px 16px;
+  background: #0d1114;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.74rem;
+}
+.runbar.running .run-status {
+  color: var(--ok);
+}
+.runbar.dead .run-status {
+  color: var(--bad);
+}
+.runbar.finished .run-status {
+  color: var(--dim);
+}
+.run-status {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+}
+.run-stat {
+  color: var(--dim);
+  white-space: nowrap;
+}
+.run-stat b {
+  color: var(--text);
+  font-family: var(--mono);
+  font-weight: 500;
+}
+.run-speed {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  color: var(--dim);
+}
+.node-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+button.danger {
+  border-color: rgba(224, 92, 92, 0.5);
+  color: var(--bad);
+}
+button.primary {
+  border-color: rgba(159, 208, 255, 0.5);
+  color: var(--accent);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.link-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.link-controls select {
+  padding: 3px 6px;
+  font-size: 0.68rem;
+}
+
+/* ---------- run overlays ---------- */
+.event-console {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  pointer-events: none;
+}
+.event-line {
+  display: flex;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  color: var(--dim);
+  background: rgba(11, 13, 16, 0.78);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.event-line .event-time {
+  color: var(--dim-2);
+  flex-shrink: 0;
+}
+.event-line.kind-warn .event-msg {
+  color: var(--warn);
+}
+.event-line.kind-death .event-msg {
+  color: var(--bad);
+}
+.event-line.kind-fault .event-msg {
+  color: var(--accent);
+}
+.event-line.kind-finish .event-msg {
+  color: var(--ok);
+}
+.event-line.kind-start .event-msg {
+  color: var(--text);
+}
+
+.postmortem-backdrop {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 13, 16, 0.72);
+  backdrop-filter: blur(3px);
+}
+.postmortem {
+  width: min(600px, 92%);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  padding: 22px 24px;
+  max-height: 84%;
+  overflow-y: auto;
+}
+.postmortem.dead {
+  border-color: rgba(224, 92, 92, 0.45);
+}
+.pm-kicker {
+  font-size: 0.64rem;
+  letter-spacing: 0.24em;
+  color: var(--dim-2);
+}
+.pm-title {
+  margin: 8px 0 6px;
+  font-size: 1.15rem;
+  line-height: 1.3;
+  color: var(--text);
+}
+.postmortem.dead .pm-title {
+  color: var(--bad);
+}
+.pm-detail {
+  color: var(--dim);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  margin: 0 0 14px;
+}
+.pm-sub {
+  font-size: 0.6rem;
+  letter-spacing: 0.2em;
+  color: var(--dim-2);
+  margin: 12px 0 6px;
+}
+.pm-repairs ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--dim);
+  font-size: 0.78rem;
+  line-height: 1.7;
+}
+.pm-trail {
+  margin-top: 8px;
+}
+.pm-reset {
+  margin-top: 16px;
+}
+
+/* ---------- run meters on nodes ---------- */
+.node-label.unplugged {
+  opacity: 0.55;
+  border-style: dashed;
+}
+.node-label.unplugged .nl-tps {
+  color: var(--dim-2);
+}
+.nl-vram {
+  margin-top: 4px;
+  height: 5px;
+  background: #1a2028;
+  border-radius: 99px;
+  overflow: hidden;
+}
+.nl-vram-fill {
+  height: 100%;
+  background: var(--ok);
+}
+.nl-vram-fill.tight {
+  background: var(--warn);
+}
+.nl-vram-fill.overloaded {
+  background: var(--bad);
 }

@@ -3,24 +3,32 @@ import {
   DEVICES,
   MODELS,
   estimateDecode,
-  estimatePipeline,
   fitStatus,
   fitStatusForCapacity,
+  hopGbpsForChain,
+  pipelineBreakdown,
   usableMemoryGb,
+  type Device,
   type FitStatus,
+  type PipelineEstimate,
   type Quant,
 } from "./sim";
 import { Scene } from "./rig/Scene";
 import { useRig } from "./rig/useRig";
+import { useRun } from "./rig/useRun";
 import type { NodeEstimate } from "./rig/NodeMesh";
+import { EventConsole } from "./ui/EventConsole";
 import { Inspector, type ClusterInfo, type SelectedInfo } from "./ui/Inspector";
 import { Palette } from "./ui/Palette";
+import { Postmortem } from "./ui/Postmortem";
+import { RunBar } from "./ui/RunBar";
 import { TopBar } from "./ui/TopBar";
 
 const DEFAULT_MODEL = "llama3.1_8b";
 
 export default function App() {
   const rig = useRig();
+  const run = useRun();
   const [modelId, setModelId] = useState(DEFAULT_MODEL);
   const [quant, setQuant] = useState<Quant>("q4_k_m");
   const [contextTokens, setContextTokens] = useState(1024);
@@ -58,7 +66,7 @@ export default function App() {
   const cluster: ClusterInfo = useMemo(() => {
     const devices = rig.nodes
       .map((n) => devicesById.get(n.deviceId))
-      .filter((d): d is NonNullable<typeof d> => Boolean(d));
+      .filter((d): d is Device => Boolean(d));
     const totalUsableGb = devices.reduce((a, d) => a + usableMemoryGb(d), 0);
     let distributedFit: FitStatus | null = null;
     if (devices.length > 0) {
@@ -68,16 +76,35 @@ export default function App() {
         distributedFit = null;
       }
     }
-    let pipeline = null;
+    let pipeline: PipelineEstimate | null = null;
     if (rig.nodes.length >= 2 && rig.components.length === 1) {
       try {
-        pipeline = estimatePipeline(devices, model, quant, contextTokens);
+        const hopGbps = hopGbpsForChain(
+          rig.nodes.map((n) => n.id),
+          rig.links,
+        );
+        const { stages, transferMs, totalMs } = pipelineBreakdown(
+          devices,
+          model,
+          quant,
+          contextTokens,
+          hopGbps,
+        );
+        pipeline = {
+          tokensPerSec: 1000 / totalMs,
+          stages,
+          transferMs,
+          totalMs,
+          linkBandwidthGbps: Math.min(...hopGbps),
+          assumptions:
+            "Equal split by usable memory; per-stage KV reads; fp16 activation per hop at each link's speed; batch 1.",
+        };
       } catch {
         pipeline = null;
       }
     }
     return { nodeCount: rig.nodes.length, totalUsableGb, distributedFit, pipeline };
-  }, [rig.nodes, rig.components, devicesById, model, quant, contextTokens]);
+  }, [rig.nodes, rig.components, rig.links, devicesById, model, quant, contextTokens]);
 
   const selected: SelectedInfo | null = useMemo(() => {
     if (!selectedId) return null;
@@ -94,7 +121,12 @@ export default function App() {
       const n = rig.nodes.find((x) => x.id === id);
       return n ? (devicesById.get(n.deviceId)?.name ?? "?") : "?";
     };
-    return rig.links.map((l) => ({ id: l.id, aName: nameOf(l.a), bName: nameOf(l.b) }));
+    return rig.links.map((l) => ({
+      id: l.id,
+      aName: nameOf(l.a),
+      bName: nameOf(l.b),
+      gbps: l.gbps,
+    }));
   }, [rig.links, rig.nodes, devicesById]);
 
   const handleSelect = (id: string | null) => {
@@ -114,6 +146,35 @@ export default function App() {
     setSelectedId(id);
   };
 
+  const startRun = () => {
+    const nodes: { id: string; device: Device }[] = [];
+    for (const n of rig.nodes) {
+      const device = devicesById.get(n.deviceId);
+      if (device) nodes.push({ id: n.id, device });
+    }
+    if (nodes.length === 0) return;
+    run.start({
+      nodes,
+      links: rig.links.map((l) => ({ id: l.id, a: l.a, b: l.b, gbps: l.gbps })),
+      model,
+      quant,
+      contextStart: contextTokens,
+      maxTokens: 4096,
+    });
+  };
+
+  const handleLinkGbps = (id: string, gbps: number) => {
+    rig.dispatch({ type: "setLinkGbps", id, gbps });
+    if (run.run?.status === "running") run.throttle(id, gbps);
+  };
+
+  const resetAll = () => {
+    run.stop();
+    rig.dispatch({ type: "reset" });
+    setSelectedId(null);
+    setLinkStartId(null);
+  };
+
   return (
     <div className="app">
       <TopBar
@@ -123,6 +184,7 @@ export default function App() {
         linkMode={linkMode}
         nodeCount={rig.nodes.length}
         linkCount={rig.links.length}
+        runActive={run.run !== null}
         onModel={setModelId}
         onQuant={setQuant}
         onContext={setContextTokens}
@@ -130,12 +192,12 @@ export default function App() {
           setLinkMode((v) => !v);
           setLinkStartId(null);
         }}
-        onReset={() => {
-          rig.dispatch({ type: "reset" });
-          setSelectedId(null);
-          setLinkStartId(null);
-        }}
+        onRun={startRun}
+        onReset={resetAll}
       />
+      {run.run && (
+        <RunBar run={run.run} speed={run.speed} onSpeed={run.setSpeed} onStop={run.stop} />
+      )}
       <div className="main">
         <Palette onAdd={(deviceId) => rig.dispatch({ type: "add", deviceId })} />
         <div className="canvas-wrap">
@@ -147,10 +209,13 @@ export default function App() {
             selectedId={selectedId}
             linkStartId={linkStartId}
             draggingId={draggingId}
+            run={run.run}
             onSelect={handleSelect}
             onMove={(id, cell) => rig.dispatch({ type: "move", id, cell })}
             onDragChange={setDraggingId}
           />
+          {run.run && <EventConsole run={run.run} />}
+          {run.run && <Postmortem run={run.run} onReset={run.stop} />}
           <div className="canvas-hint">
             {linkMode
               ? linkStartId
@@ -166,11 +231,15 @@ export default function App() {
           contextTokens={contextTokens}
           links={links}
           cluster={cluster}
+          runActive={run.run?.status === "running"}
+          unpluggedIds={run.run?.unplugged ?? []}
           onRemoveNode={(id) => {
             rig.dispatch({ type: "remove", id });
             setSelectedId(null);
           }}
           onUnlink={(id) => rig.dispatch({ type: "unlink", id })}
+          onLinkGbps={handleLinkGbps}
+          onUnplug={run.unplug}
         />
       </div>
     </div>

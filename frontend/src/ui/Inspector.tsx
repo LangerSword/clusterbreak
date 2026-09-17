@@ -27,10 +27,14 @@ interface Props {
   model: Model;
   quant: Quant;
   contextTokens: number;
-  links: { id: string; aName: string; bName: string }[];
+  links: { id: string; aName: string; bName: string; gbps: number }[];
   cluster: ClusterInfo;
+  runActive: boolean;
+  unpluggedIds: string[];
   onRemoveNode: (id: string) => void;
   onUnlink: (id: string) => void;
+  onLinkGbps: (id: string, gbps: number) => void;
+  onUnplug: (id: string) => void;
 }
 
 const FIT_LABEL: Record<FitStatus, string> = {
@@ -46,8 +50,12 @@ export function Inspector({
   contextTokens,
   links,
   cluster,
+  runActive,
+  unpluggedIds,
   onRemoveNode,
   onUnlink,
+  onLinkGbps,
+  onUnplug,
 }: Props) {
   return (
     <aside className="inspector">
@@ -86,7 +94,18 @@ export function Inspector({
               tok/s decode · {model.name} · {quant.toUpperCase()} · {contextTokens} ctx
             </span>
           </div>
-          <button onClick={() => onRemoveNode(selected.id)}>REMOVE NODE</button>
+          <div className="node-actions">
+            <button onClick={() => onRemoveNode(selected.id)}>REMOVE NODE</button>
+            {runActive && (
+              <button
+                className="danger"
+                disabled={unpluggedIds.includes(selected.id)}
+                onClick={() => onUnplug(selected.id)}
+              >
+                {unpluggedIds.includes(selected.id) ? "UNPLUGGED" : "UNPLUG (INJECT FAILURE)"}
+              </button>
+            )}
+          </div>
           <p className="note">
             <a href={selected.device.source} target="_blank" rel="noreferrer">
               device source ↗
@@ -147,7 +166,20 @@ export function Inspector({
             <span>
               {l.aName} ↔ {l.bName}
             </span>
-            <button onClick={() => onUnlink(l.id)}>×</button>
+            <span className="link-controls">
+              <select
+                value={l.gbps}
+                onChange={(e) => onLinkGbps(l.id, Number(e.target.value))}
+                title="link speed — lowering it during a run injects the throttle fault live"
+              >
+                {[0.01, 1, 10, 25, 100].map((g) => (
+                  <option key={g} value={g}>
+                    {g} GbE
+                  </option>
+                ))}
+              </select>
+              <button onClick={() => onUnlink(l.id)}>×</button>
+            </span>
           </div>
         ))}
       </section>

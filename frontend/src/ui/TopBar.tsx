@@ -15,10 +15,12 @@ interface Props {
   linkMode: boolean;
   nodeCount: number;
   linkCount: number;
+  runActive: boolean;
   onModel: (id: string) => void;
   onQuant: (q: Quant) => void;
   onContext: (n: number) => void;
   onToggleLink: () => void;
+  onRun: () => void;
   onReset: () => void;
 }
 
@@ -62,6 +64,14 @@ export function TopBar(p: Props) {
             ))}
           </select>
         </label>
+        <button
+          className="primary"
+          disabled={p.runActive || p.nodeCount === 0}
+          onClick={p.onRun}
+          title="start a simulated run with the current rig"
+        >
+          RUN ▶
+        </button>
         <button className={p.linkMode ? "active" : ""} onClick={p.onToggleLink}>
           LINK MODE
         </button>

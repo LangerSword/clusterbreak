@@ -1,6 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { Grid, OrbitControls, QuadraticBezierLine } from "@react-three/drei";
-import type { Device } from "../sim";
+import type { Device, RunState } from "../sim";
 import type { Cell } from "./grid";
 import { NodeMesh, type NodeEstimate } from "./NodeMesh";
 import type { RigLink, RigNode } from "./useRig";
@@ -13,6 +13,8 @@ interface Props {
   selectedId: string | null;
   linkStartId: string | null;
   draggingId: string | null;
+  /** Active run — drives live meters and unplugged-node visuals. */
+  run: RunState | null;
   onSelect: (id: string | null) => void;
   onMove: (id: string, cell: Cell) => void;
   onDragChange: (id: string | null) => void;
@@ -26,6 +28,7 @@ export function Scene({
   selectedId,
   linkStartId,
   draggingId,
+  run,
   onSelect,
   onMove,
   onDragChange,
@@ -63,14 +66,15 @@ export function Scene({
         const a = byId.get(l.a);
         const b = byId.get(l.b);
         if (!a || !b) return null;
+        const throttled = l.gbps < 1;
         return (
           <QuadraticBezierLine
             key={l.id}
             start={[a.cell[0], 0.3, a.cell[1]]}
             end={[b.cell[0], 0.3, b.cell[1]]}
             mid={[(a.cell[0] + b.cell[0]) / 2, 1.0, (a.cell[1] + b.cell[1]) / 2]}
-            color="#4d5f74"
-            lineWidth={1.6}
+            color={throttled ? "#e0b341" : "#4d5f74"}
+            lineWidth={throttled ? 2.2 : 1.6}
           />
         );
       })}
@@ -79,6 +83,8 @@ export function Scene({
         const device = devicesById.get(n.deviceId);
         const est = estimates.get(n.id);
         if (!device || !est) return null;
+        const meter = run?.meters.find((m) => m.nodeId === n.id) ?? null;
+        const unplugged = run?.unplugged.includes(n.id) ?? false;
         return (
           <NodeMesh
             key={n.id}
@@ -88,6 +94,8 @@ export function Scene({
             linkStart={linkStartId === n.id}
             dragging={draggingId === n.id}
             estimate={est}
+            meter={meter}
+            unplugged={unplugged}
             onSelect={onSelect}
             onMove={onMove}
             onDragChange={onDragChange}

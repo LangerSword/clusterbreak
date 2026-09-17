@@ -1,4 +1,5 @@
 import { useMemo, useReducer } from "react";
+import { DEFAULT_LINK_GBPS } from "../sim";
 import type { Cell } from "./grid";
 import { cellKey, firstFreeCell } from "./grid";
 
@@ -14,6 +15,8 @@ export interface RigLink {
   id: string;
   a: string;
   b: string;
+  /** Link speed in Gbps — used by the run simulator (throttling = fault injection). */
+  gbps: number;
 }
 
 export interface RigState {
@@ -27,6 +30,7 @@ type Action =
   | { type: "remove"; id: string }
   | { type: "link"; a: string; b: string }
   | { type: "unlink"; id: string }
+  | { type: "setLinkGbps"; id: string; gbps: number }
   | { type: "reset" };
 
 let seq = 0;
@@ -64,10 +68,18 @@ export function reducer(state: RigState, action: Action): RigState {
         (l) => (l.a === action.a && l.b === action.b) || (l.a === action.b && l.b === action.a),
       );
       if (dup) return state;
-      return { ...state, links: [...state.links, { id: nextId("l"), a: action.a, b: action.b }] };
+      return {
+        ...state,
+        links: [...state.links, { id: nextId("l"), a: action.a, b: action.b, gbps: DEFAULT_LINK_GBPS }],
+      };
     }
     case "unlink":
       return { ...state, links: state.links.filter((l) => l.id !== action.id) };
+    case "setLinkGbps":
+      return {
+        ...state,
+        links: state.links.map((l) => (l.id === action.id ? { ...l, gbps: action.gbps } : l)),
+      };
     case "reset":
       return { nodes: [], links: [] };
   }
