@@ -3,14 +3,14 @@
 ## Day 1 — Thu Sep 17
 
 - **08:26** — Live site check: countdown flipped to "ENDS IN 3 DAYS, 11 HOURS" → build clock open; deadline ≈ Sun ~19:30 IST (schedule page still says exact hours are being finalised).
-- **08:28** — Repo created at kickoff — public, commit history starts inside the event window.
-- **08:29** — Scaffold committed: docs, license, README, .gitignore. Frontend scaffolded (Vite 8 + React 19 + TS) and building clean.
-- **08:33** — Sim engine skeleton committed: decode physics (bandwidth-bound) + fit accounting; **20 tests, all passing**, calibrated against three measured anchors (A1: RTX 3090 → 111.74 tok/s; A2: RTX 4090 → 127.74; A6: M2 Ultra → 76.28), each within its published tolerance. A negative-control test proves the tolerance band rejects uncalibrated physics.
-- **08:36** — Backend live: Lambda `clusterbreak-api` (python3.13) + API Gateway HTTP API. `GET /health` returns `{"ok": true, ...}` — verified over the public endpoint.
-- **08:37** — Frontend uploaded to private S3 bucket; CloudFront distribution `EX9Y84FE8SFH3` created with OAC + bucket policy (bucket readable only through this distribution).
-- **08:4x** — Placeholder landing page (real Clusterbreak identity, dark theme) deployed behind CloudFront.
-- **08:52** — **Thin deploy verified end-to-end**: `https://d1at2woaiwy2hz.cloudfront.net` serves the landing page over HTTPS (SPA fallback → 200 on unknown paths), the S3 bucket is private (direct object access → 403), and `https://wa7rwqxhk0.execute-api.ap-south-1.amazonaws.com/health` answers from the public internet. Commit `9858f63`.
-- **08:53** — Submission form not visible on the event site yet (nav shows only "Check in"); will re-check before end of day.
+- **08:28–08:29** — Repo created at kickoff; scaffold committed (docs, license, README, .gitignore).
+- **08:31** — Frontend scaffolded (Vite 8 + React 19 + TS), builds clean; committed.
+- **08:33** — Sim engine skeleton committed: decode physics (bandwidth-bound) + fit accounting; **20 tests passing**, calibrated to three measured anchors (A1: RTX 3090 → 111.74 tok/s; A2: RTX 4090 → 127.74; A6: M2 Ultra → 76.28) — each within its published tolerance. A negative-control test proves the tolerance band rejects uncalibrated physics.
+- **08:35** — Lambda `clusterbreak-api` (python3.13) live — direct invoke returns the `/health` payload (200).
+- **08:38** — API Gateway HTTP API created; `GET /health` verified over the public endpoint (`https://wa7rwqxhk0.execute-api.ap-south-1.amazonaws.com/health` → `{"ok": true, ...}`).
+- **08:38–08:40** — Frontend synced to the private S3 bucket; CloudFront `EX9Y84FE8SFH3` deployed with OAC + bucket policy; landing page live over HTTPS.
+- **08:40–08:42** — Verification sweep: CloudFront 200 (SPA fallback → 200 on unknown paths; direct S3 object → 403, i.e. bucket is private), API `/health` → 200. Commits `9858f63`, `d21c698`.
+- **08:41** — Submission form not visible on the event site yet (nav shows only "Check in"); re-check before end of day.
 
 ## Learnings (kept for the writeup)
 
