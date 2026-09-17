@@ -9,6 +9,8 @@
 - **08:36** — Backend live: Lambda `clusterbreak-api` (python3.13) + API Gateway HTTP API. `GET /health` returns `{"ok": true, ...}` — verified over the public endpoint.
 - **08:37** — Frontend uploaded to private S3 bucket; CloudFront distribution `EX9Y84FE8SFH3` created with OAC + bucket policy (bucket readable only through this distribution).
 - **08:4x** — Placeholder landing page (real Clusterbreak identity, dark theme) deployed behind CloudFront.
+- **08:52** — **Thin deploy verified end-to-end**: `https://d1at2woaiwy2hz.cloudfront.net` serves the landing page over HTTPS (SPA fallback → 200 on unknown paths), the S3 bucket is private (direct object access → 403), and `https://wa7rwqxhk0.execute-api.ap-south-1.amazonaws.com/health` answers from the public internet. Commit `9858f63`.
+- **08:53** — Submission form not visible on the event site yet (nav shows only "Check in"); will re-check before end of day.
 
 ## Learnings (kept for the writeup)
 
