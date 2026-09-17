@@ -9,6 +9,8 @@ Everyone asks *"can my machines run this?"* — and the honest answer is scatter
 ## Status
 Day 1 of a 4-day build (First Commit hackathon, Sep 17–20 2026). Repo history starts at kickoff; see `docs/event-log.md` for the build log.
 
+**Live now:** https://d1at2woaiwy2hz.cloudfront.net (landing placeholder) · `GET /health` on the API is up; the interactive simulator lands next.
+
 ## Architecture (v0)
 - `frontend/` — static SPA (Vite + React + TS); the simulator runs fully client-side
 - `sim/` — the simulation engine (pure TypeScript, deterministic, unit-tested against cited real-world measurements)

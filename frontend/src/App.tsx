@@ -1,122 +1,80 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+const styles = {
+  main: {
+    minHeight: "100svh",
+    display: "flex",
+    flexDirection: "column" as const,
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center" as const,
+    padding: "2rem",
+    gap: "1.25rem",
+  },
+  kicker: {
+    margin: 0,
+    letterSpacing: "0.35em",
+    fontSize: "0.78rem",
+    color: "#8a8f98",
+    fontWeight: 600,
+  },
+  h1: {
+    margin: 0,
+    maxWidth: "22ch",
+    fontSize: "clamp(1.6rem, 4.5vw, 3.1rem)",
+    lineHeight: 1.15,
+    fontWeight: 650,
+    letterSpacing: "-0.01em",
+    color: "#f2f0ed",
+  },
+  sub: {
+    margin: 0,
+    maxWidth: "58ch",
+    color: "#a7adb6",
+    fontSize: "1.02rem",
+    lineHeight: 1.6,
+  },
+  status: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "0.55rem",
+    border: "1px solid #232830",
+    background: "#12151a",
+    color: "#cfd4db",
+    borderRadius: "999px",
+    padding: "0.5rem 1rem",
+    fontSize: "0.86rem",
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    background: "#57d38c",
+    boxShadow: "0 0 10px #57d38c88",
+  },
+  footer: {
+    marginTop: "1.5rem",
+    color: "#5c636d",
+    fontSize: "0.78rem",
+    letterSpacing: "0.06em",
+  },
+};
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+    <main style={styles.main}>
+      <p style={styles.kicker}>CLUSTERBREAK</p>
+      <h1 style={styles.h1}>Build a rig. Run a model. Break it on purpose.</h1>
+      <p style={styles.sub}>
+        An interactive simulator for local AI inference clusters — pick real hardware, choose a
+        model and quantization, watch tokens/s and VRAM move, then unplug a node and see exactly
+        what dies and why.
+      </p>
+      <div style={styles.status}>
+        <span style={styles.dot} />
+        Day 1 · simulation engine + API are live — the interactive rig builder lands next
+      </div>
+      <footer style={styles.footer}>FIRST COMMIT · BHARAT BUILDS TOUR · SEP 17–20 2026</footer>
+    </main>
+  );
 }
 
-export default App
+export default App;

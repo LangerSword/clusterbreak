@@ -1,0 +1,64 @@
+{
+  "CallerReference": "clusterbreak-2026-09-17-v1",
+  "Comment": "Clusterbreak frontend (S3 static SPA)",
+  "Enabled": true,
+  "DefaultRootObject": "index.html",
+  "Origins": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "Id": "s3-clusterbreak-frontend",
+        "DomainName": "clusterbreak-703651068111-frontend.s3.ap-south-1.amazonaws.com",
+        "OriginPath": "",
+        "CustomHeaders": { "Quantity": 0 },
+        "S3OriginConfig": { "OriginAccessIdentity": "" },
+        "OriginAccessControlId": "OAC_ID_PLACEHOLDER"
+      }
+    ]
+  },
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "s3-clusterbreak-frontend",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "AllowedMethods": {
+      "Quantity": 2,
+      "Items": ["GET", "HEAD"],
+      "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+    },
+    "ForwardedValues": { "QueryString": false, "Cookies": { "Forward": "none" } },
+    "MinTTL": 0,
+    "DefaultTTL": 3600,
+    "MaxTTL": 86400,
+    "Compress": true,
+    "TrustedSigners": { "Enabled": false, "Quantity": 0 },
+    "FunctionAssociations": { "Quantity": 0 },
+    "LambdaFunctionAssociations": { "Quantity": 0 },
+    "FieldLevelEncryptionId": ""
+  },
+  "CustomErrorResponses": {
+    "Quantity": 2,
+    "Items": [
+      {
+        "ErrorCode": 403,
+        "ResponsePagePath": "/index.html",
+        "ResponseCode": "200",
+        "ErrorCachingMinTTL": 10
+      },
+      {
+        "ErrorCode": 404,
+        "ResponsePagePath": "/index.html",
+        "ResponseCode": "200",
+        "ErrorCachingMinTTL": 10
+      }
+    ]
+  },
+  "PriceClass": "PriceClass_200",
+  "ViewerCertificate": {
+    "CloudFrontDefaultCertificate": true,
+    "MinimumProtocolVersion": "TLSv1.2_2021",
+    "CertificateSource": "cloudfront"
+  },
+  "Restrictions": { "GeoRestriction": { "RestrictionType": "none", "Quantity": 0 } },
+  "WebACLId": "",
+  "HttpVersion": "http2",
+  "IsIPV6Enabled": true
+}

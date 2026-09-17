@@ -1,10 +1,18 @@
 # Event log — First Commit (Sep 17–20, 2026)
 
 ## Day 1 — Thu Sep 17
+
 - **08:26** — Live site check: countdown flipped to "ENDS IN 3 DAYS, 11 HOURS" → build clock open; deadline ≈ Sun ~19:30 IST (schedule page still says exact hours are being finalised).
 - **08:28** — Repo created at kickoff — public, commit history starts inside the event window.
-- **08:2x** — Scaffold: frontend (Vite + React + TS), sim engine package, backend Lambda skeleton, docs.
-- Next: thin end-to-end deploy (S3 + CloudFront → API Gateway → Lambda `/health`), engine skeleton + first calibration anchor test, placeholder submission.
+- **08:29** — Scaffold committed: docs, license, README, .gitignore. Frontend scaffolded (Vite 8 + React 19 + TS) and building clean.
+- **08:33** — Sim engine skeleton committed: decode physics (bandwidth-bound) + fit accounting; **20 tests, all passing**, calibrated against three measured anchors (A1: RTX 3090 → 111.74 tok/s; A2: RTX 4090 → 127.74; A6: M2 Ultra → 76.28), each within its published tolerance. A negative-control test proves the tolerance band rejects uncalibrated physics.
+- **08:36** — Backend live: Lambda `clusterbreak-api` (python3.13) + API Gateway HTTP API. `GET /health` returns `{"ok": true, ...}` — verified over the public endpoint.
+- **08:37** — Frontend uploaded to private S3 bucket; CloudFront distribution `EX9Y84FE8SFH3` created with OAC + bucket policy (bucket readable only through this distribution).
+- **08:4x** — Placeholder landing page (real Clusterbreak identity, dark theme) deployed behind CloudFront.
 
-## Learnings
-- (filled as the build goes — what broke, what was learned, decisions changed)
+## Learnings (kept for the writeup)
+
+- **`NODE_ENV=production` in this shell silently skips npm devDependencies** — `npm install` reports "up to date" while `node_modules/.bin` stays empty; `--include=dev` fixes it. Cost ~10 min at the start of the day.
+- **API Gateway quick-create does not attach the Lambda permission** — the endpoint 500s until `lambda:add-permission` is added by hand.
+- **Fresh `execute-api` hostnames + campus DNS = intermittent resolution failure** — `curl --resolve` bypasses it; works fine once propagated.
+- **Fit-threshold recalibration**: first-pass "tight fit" rule called a 138GB model on 192GB unified memory "comfortable"; the researched verdict (30GB headroom is *not* enough for KV growth) forced a stricter 20%-of-usable rule. Caught by the test suite, fixed in the engine.
