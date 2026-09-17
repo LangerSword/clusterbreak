@@ -32,7 +32,7 @@ type Action =
 let seq = 0;
 const nextId = (prefix: string) => `${prefix}-${++seq}`;
 
-function reducer(state: RigState, action: Action): RigState {
+export function reducer(state: RigState, action: Action): RigState {
   switch (action.type) {
     case "add": {
       const occupied = new Set(state.nodes.map((n) => cellKey(n.cell)));

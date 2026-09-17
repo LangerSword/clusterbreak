@@ -9,7 +9,7 @@ Everyone asks *"can my machines run this?"* — and the honest answer is scatter
 ## Status
 Day 1 of a 4-day build (First Commit hackathon, Sep 17–20 2026). Repo history starts at kickoff; see `docs/event-log.md` for the build log.
 
-**Live now:** https://d1at2woaiwy2hz.cloudfront.net (landing placeholder) · `GET /health` on the API is up; the interactive simulator lands next.
+**Live now:** https://d1at2woaiwy2hz.cloudfront.net — the interactive rig builder is up (place devices on the 3D board, wire them, get live tokens/s + fit verdicts) · `GET /health` on the API. The break-it scenarios land next.
 
 ## Architecture (v0)
 - `frontend/` — static SPA (Vite + React + TS); the simulator runs fully client-side

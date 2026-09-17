@@ -6,10 +6,13 @@ export const GRID_LIMIT = 14;
 
 const clamp = (v: number) => Math.max(-GRID_LIMIT, Math.min(GRID_LIMIT, v));
 
+/** Normalize negative zero (Math.round(-0.4) === -0) so cell values stay canonical. */
+const norm = (v: number) => (v === 0 ? 0 : v);
+
 export const cellKey = (c: Cell) => `${c[0]},${c[1]}`;
 
 export function snapCell(x: number, z: number): Cell {
-  return [clamp(Math.round(x)), clamp(Math.round(z))] as const;
+  return [norm(clamp(Math.round(x))), norm(clamp(Math.round(z)))] as const;
 }
 
 /** Cells ordered from the origin outward (ring by ring) — used for auto-placement. */
