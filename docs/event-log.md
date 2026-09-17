@@ -14,6 +14,9 @@
 - **09:59–10:17** — **Interactive 3D rig builder live**: place devices on the 3D grid board (palette → board), drag/snap to cells, wire nodes into pipelines (link mode), live decode + pipeline estimates with fit verdicts per node and for the rig as a whole. Engine gained the pipeline estimator — anchors A3 (3090×2 → 108.07 tok/s) and A4 (70B ×2 → 16.29) now covered, **25/25 engine tests**. Frontend rig logic covered by 9 unit tests.
 - **10:15** — Deployed-site verification (scripted browser, software GL): WebGL renders, three nodes placed with correct estimates (RTX 3090 + Llama-3.1-8B Q4_K_M → 111.7 tok/s = anchor A1), model/quant/context switches recompute live, **zero console errors**. Screenshot: `/tmp/cb-shot.png`.
 - **10:22** — Interaction verification on the deployed bundle: LINK MODE wires two nodes and the pipeline estimate appears ("pipelined across 2 nodes · 1 GbE assumed"); dragging a node moves it across cells; zero console errors through the whole sequence. Screenshot: `/tmp/cb-shot2.png`.
+- **10:29** — **Run simulator engine**: deterministic token loop (KV grows with context), fault injection (unplug a node, throttle a link), death detection with repair lists — 9 new tests, engine at **34/34**.
+- **10:31–10:36** — **Break-it mode live**: RUN button, live VRAM meters on each node, event console over the board, UNPLUG / link-throttle fault controls, and a postmortem card ("what died and why" + repairs + event trail).
+- **10:36** — Verified on the deployed bundle (scripted browser): Llama-3.3-70B across two wired RTX 3090s ran at 13.1 tok/s → unplugging one node killed it with the exact cause (survivors need 43.56 GB, have 24 GB) + repairs; throttling the link 1 → 0.01 GbE moved transfer time 0.13 → 13.11 ms/token live; **zero console errors**. Screenshots: `/tmp/cb-shot3.png` (postmortem), `/tmp/cb-shot4.png` (throttled run).
 
 ## Learnings (kept for the writeup)
 
@@ -23,3 +26,4 @@
 - **Fit-threshold recalibration**: first-pass "tight fit" rule called a 138GB model on 192GB unified memory "comfortable"; the researched verdict (30GB headroom is *not* enough for KV growth) forced a stricter 20%-of-usable rule. Caught by the test suite, fixed in the engine.
 - **Negative zero is real**: `Math.round(-0.4)` returns `-0`, which deep-equality assertions and cell keys can trip on; grid cells normalize it.
 - **The automation browser runs with `--disable-gpu`** (no WebGL, R3F silently can't render); verifying 3D pages needs a separate headless run with software GL (`--use-angle=swiftshader`).
+- **UI layout shifts invalidate cached coordinates in scripted browser tests**: the run bar appearing pushes the canvas down, so element positions captured before it must be re-read after the shift (this bit the first break-it verification run).
