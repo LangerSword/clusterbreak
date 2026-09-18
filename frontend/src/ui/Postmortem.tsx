@@ -1,10 +1,28 @@
+import { useState } from "react";
 import type { RunState } from "../sim";
+
+export interface ShareState {
+  status: "idle" | "working" | "done" | "error";
+  url?: string;
+  error?: string;
+}
 
 /**
  * Postmortem card: what died and why, with the event trail and the repairs.
  * Also used as the completion summary when a run finishes normally.
  */
-export function Postmortem({ run, onReset }: { run: RunState; onReset: () => void }) {
+export function Postmortem({
+  run,
+  onReset,
+  share,
+  onShare,
+}: {
+  run: RunState;
+  onReset: () => void;
+  share: ShareState;
+  onShare: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
   if (run.status === "running") return null;
   const dead = run.status === "dead";
   const trail = run.events.slice(-7).reverse();
@@ -45,9 +63,41 @@ export function Postmortem({ run, onReset }: { run: RunState; onReset: () => voi
           ))}
         </div>
 
-        <button className="pm-reset" onClick={onReset}>
-          RESET RUN
-        </button>
+        <div className="pm-actions">
+          {share.status === "idle" && (
+            <button className="pm-share" onClick={onShare}>
+              SHARE REPORT
+            </button>
+          )}
+          {share.status === "working" && (
+            <button className="pm-share" disabled>
+              SHARING…
+            </button>
+          )}
+          {share.status === "done" && share.url && (
+            <button
+              className="pm-share"
+              onClick={() => {
+                navigator.clipboard?.writeText(share.url!).then(() => {
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+            >
+              {copied ? "COPIED ✓" : "COPY REPORT LINK"}
+            </button>
+          )}
+          {share.status === "error" && (
+            <button className="pm-share" onClick={onShare} title={share.error}>
+              SHARE FAILED — RETRY
+            </button>
+          )}
+          <button className="pm-reset" onClick={onReset}>
+            RESET RUN
+          </button>
+        </div>
+        {share.status === "done" && share.url && <div className="pm-link">{share.url}</div>}
+        {share.status === "error" && share.error && <div className="pm-link error">{share.error}</div>}
       </div>
     </div>
   );

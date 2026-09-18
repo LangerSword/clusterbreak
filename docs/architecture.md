@@ -17,5 +17,12 @@ browser ─── SPA (S3 + CloudFront) ── sim engine (client-side)
    └── fetch ──> API Gateway HTTP API ──> Lambda ──> DynamoDB (runs, benchmarks)
 ```
 
+## Runs API (shareable postmortems, v0.2)
+`POST /runs` stores a bounded report (≤8 KB, validated: ≤8 nodes, ≤16 links, quant whitelist, verdict ≤2000 chars) in DynamoDB `clusterbreak-runs` and returns a random 10-char id; `GET /runs/{id}` returns it. Reports carry a 90-day TTL. Writes are one-shot, reads are by unguessable id — no auth by design, no user data.
+
+**Cost decisions (Ship It):** the simulation itself is 100% client-side — zero server cost per run or per viewer. The backend exists only for share links: DynamoDB on-demand ($1.25/M writes, $0.25/M reads, $0.25/GB-month storage) + HTTP API ($1/M requests) + Lambda free tier. At demo scale (thousands of shares) this is literally pennies per month, with no capacity planning and automatic expiry capping storage.
+
+**Two bugs found by not trusting green:** (1) `_table = None` at module level was shadowed by `def _table()` — the accessor returned itself; fixed by renaming the cache. (2) boto3's DynamoDB resource rejects Python floats — reports parse floats as `Decimal` and serialize them back on read. Both were invisible from the client (silent 503); the decisive tool was running the *deployed* handler locally against the real table.
+
 ## Non-goals (v0)
 No real telemetry upload, no auth (share via unguessable links), no batching simulation, no tensor-parallel micro-model beyond a simplified collective cost.

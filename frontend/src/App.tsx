@@ -26,9 +26,12 @@ import { useCustomDevices, useCustomModels } from "./custom/useCustom";
 import { EventConsole } from "./ui/EventConsole";
 import { Inspector, type ClusterInfo, type SelectedInfo } from "./ui/Inspector";
 import { Palette } from "./ui/Palette";
-import { Postmortem } from "./ui/Postmortem";
+import { Postmortem, type ShareState } from "./ui/Postmortem";
 import { RunBar } from "./ui/RunBar";
+import { SharedReport } from "./ui/SharedReport";
 import { TopBar } from "./ui/TopBar";
+import { shareRun } from "./api";
+import { buildReportPayload } from "./report";
 
 const DEFAULT_MODEL = "llama3.1_8b";
 
@@ -51,6 +54,8 @@ export default function App() {
   const [linkStartId, setLinkStartId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [lastPreset, setLastPreset] = useState<string | null>(null);
+  const [share, setShare] = useState<ShareState>({ status: "idle" });
+  const [sharedReportId] = useState(() => new URLSearchParams(window.location.search).get("report"));
 
   const models = useMemo(() => [...MODELS, ...customModels], [customModels]);
   const model = models.find((m) => m.id === modelId) ?? models[0];
@@ -285,6 +290,7 @@ export default function App() {
       if (device) nodes.push({ id: n.id, device });
     }
     if (nodes.length === 0) return;
+    setShare({ status: "idle" });
     run.start({
       nodes,
       links: rig.links.map((l) => ({ id: l.id, a: l.a, b: l.b, gbps: l.gbps })),
@@ -305,6 +311,44 @@ export default function App() {
     rig.dispatch({ type: "reset" });
     setSelectedId(null);
     setLinkStartId(null);
+    setShare({ status: "idle" });
+  };
+
+  const shareRunReport = async () => {
+    if (!run.run) return;
+    setShare({ status: "working" });
+    try {
+      let fp: number | null = null;
+      try {
+        fp = footprintGb(model, quant, contextTokens);
+      } catch {
+        fp = null;
+      }
+      const payload = buildReportPayload({
+        nodes: rig.nodes
+          .map((n) => ({
+            device: devicesById.get(n.deviceId),
+            fitted: estimates.get(n.id)?.kind === "fitted",
+          }))
+          .filter((x): x is { device: Device; fitted: boolean } => Boolean(x.device)),
+        links: rig.links.map((l) => ({ gbps: l.gbps })),
+        model,
+        quant,
+        contextTokens,
+        footprintGb: fp,
+        run: run.run,
+        verdict,
+        preset: lastPreset,
+        unpluggedNames: run.run.unplugged.map((id) => {
+          const n = rig.nodes.find((x) => x.id === id);
+          return n ? (devicesById.get(n.deviceId)?.name ?? id) : id;
+        }),
+      });
+      const id = await shareRun(payload);
+      setShare({ status: "done", url: `${window.location.origin}/?report=${id}` });
+    } catch (e) {
+      setShare({ status: "error", error: e instanceof Error ? e.message : String(e) });
+    }
   };
 
   const loadPreset = (p: Preset) => {
@@ -326,6 +370,8 @@ export default function App() {
     if (p) loadPreset(p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (sharedReportId) return <SharedReport id={sharedReportId} />;
 
   return (
     <div className="app">
@@ -377,7 +423,7 @@ export default function App() {
             onDragChange={setDraggingId}
           />
           {run.run && <EventConsole run={run.run} />}
-          {run.run && <Postmortem run={run.run} onReset={run.stop} />}
+          {run.run && <Postmortem run={run.run} onReset={run.stop} share={share} onShare={shareRunReport} />}
           <div className="canvas-hint">
             {linkMode
               ? linkStartId

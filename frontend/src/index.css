@@ -684,3 +684,64 @@ button:disabled {
   letter-spacing: 0.06em;
   cursor: pointer;
 }
+
+/* ---- share + shared report ---- */
+.pm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.pm-actions button {
+  flex: 1;
+}
+.pm-share {
+  border-color: var(--accent, #9fd0ff);
+  color: var(--accent, #9fd0ff);
+}
+.pm-share:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.pm-link {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--dim);
+  word-break: break-all;
+}
+.pm-link.error {
+  color: var(--bad, #e05c5c);
+}
+.shared {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.shared-card {
+  max-width: 760px;
+  width: 100%;
+  background: var(--panel, #0f1216);
+  border: 1px solid var(--line, #1d242c);
+  border-radius: 14px;
+  padding: 28px;
+}
+.shared-brand {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  color: var(--accent, #9fd0ff);
+  margin-bottom: 10px;
+}
+.shared-cta {
+  display: inline-block;
+  margin-top: 14px;
+  color: var(--accent, #9fd0ff);
+  text-decoration: none;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+}
+.shared-cta:hover {
+  text-decoration: underline;
+}

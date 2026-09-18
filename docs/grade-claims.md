@@ -1,6 +1,6 @@
 # Claim grade — Clusterbreak (deterministic grader)
 
-*Run: 2026-09-18 00:55 UTC · grader: `tools/grade_claims.py` · method: recompute-from-sources + live re-fetch + suite runs + negative controls.*
+*Run: 2026-09-18 01:10 UTC · grader: `tools/grade_claims.py` · method: recompute-from-sources + live re-fetch + suite runs + negative controls.*
 
 | Dimension | Score |
 |---|---|
