@@ -144,6 +144,7 @@ export function buildTemplate(a: TemplateArgs): string {
         KeyName: !Ref KeyName
         SecurityGroupIds: [!Ref NodeSecurityGroup]
         InstanceMarketOptions: !If [IsSpot, { MarketType: spot }, !Ref "AWS::NoValue"]
+        MetadataOptions: { HttpEndpoint: enabled, HttpTokens: required, HttpPutResponseHopLimit: 1 }
         BlockDeviceMappings:
           - DeviceName: /dev/sda1
             Ebs: { VolumeSize: 60, VolumeType: gp3 }
