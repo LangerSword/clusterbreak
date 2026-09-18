@@ -26,6 +26,12 @@ cd sim && npm install && npm test
 cd frontend && npm install && npm run dev
 ```
 
+## Verification
+- **Engine**: 37 tests (`cd sim && npm test`) — anchors, KV math, pipeline, run simulator, user-measurement calibration; includes a negative-control test that a wrong efficiency fails its band.
+- **Rig interaction**: 9 tests (`cd frontend && npm test`).
+- **Claims grader**: `python3 tools/grade_claims.py` → `docs/grade-claims.md` — recomputes every fitted number from raw sources, re-fetches the HF API + benchmark tables live and diffs, runs the suites, and proves itself with negative controls (injected corruptions must be caught).
+- **Deployed-site suite**: `tools/browser/` (Playwright + software GL) — drives the real flows on the live URL and fails on any console error.
+
 ## Honesty notes
 Every model size is pulled live from the Hugging Face API, and every device's decode efficiency is fitted from measured llama.cpp benchmark campaigns — one command (`python3 tools/refresh_data.py`) refreshes and re-verifies the whole dataset (see `docs/data-report.md`). Devices with no published measurement are marked **unverified** in-app rather than shown a fabricated number. Every simplification is documented in `docs/limitations.md`.
 
