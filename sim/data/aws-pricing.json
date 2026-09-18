@@ -1,0 +1,28 @@
+{
+  "fetchedAt": "2026-09-18T02:21:56Z",
+  "region": "ap-south-1",
+  "location": "Asia Pacific (Mumbai)",
+  "source": "AWS Pricing API (on-demand, ap-south-1, Linux/shared) + EC2 DescribeSpotPriceHistory (spot: one-zone minimum at fetch time; spot moves constantly)",
+  "instances": {
+    "g4dn.xlarge": {
+      "onDemandUsdPerHour": 0.579,
+      "spotUsdPerHour": 0.1981
+    },
+    "g5.xlarge": {
+      "onDemandUsdPerHour": 1.208,
+      "spotUsdPerHour": 0.4689
+    },
+    "g5.2xlarge": {
+      "onDemandUsdPerHour": 1.45536,
+      "spotUsdPerHour": 0.4639
+    },
+    "g6.xlarge": {
+      "onDemandUsdPerHour": 0.9664,
+      "spotUsdPerHour": 0.4336
+    },
+    "g6e.xlarge": {
+      "onDemandUsdPerHour": 2.235,
+      "spotUsdPerHour": 1.2469
+    }
+  }
+}

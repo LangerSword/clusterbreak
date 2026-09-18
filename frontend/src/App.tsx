@@ -32,6 +32,13 @@ import { SharedReport } from "./ui/SharedReport";
 import { TopBar } from "./ui/TopBar";
 import { shareRun } from "./api";
 import { buildReportPayload } from "./report";
+import {
+  buildTemplate,
+  estimateCost,
+  planDeploy,
+  PRICING_FETCHED_AT,
+  PRICING_REGION,
+} from "./deploy/cfn";
 
 const DEFAULT_MODEL = "llama3.1_8b";
 
@@ -164,6 +171,15 @@ export default function App() {
       gbps: l.gbps,
     }));
   }, [rig.links, rig.nodes, devicesById]);
+
+  const deploy = useMemo(() => {
+    const devices = rig.nodes
+      .map((n) => devicesById.get(n.deviceId))
+      .filter((d): d is Device => Boolean(d));
+    if (devices.length === 0) return null;
+    const plan = planDeploy(devices);
+    return { plan, cost: estimateCost(plan) };
+  }, [rig.nodes, devicesById]);
 
   const verdict = useMemo((): string | null => {
     try {
@@ -351,6 +367,24 @@ export default function App() {
     }
   };
 
+  const downloadTemplate = () => {
+    if (!deploy || deploy.plan.entries.length === 0) return;
+    const yaml = buildTemplate({
+      plan: deploy.plan,
+      model,
+      quant,
+      contextTokens,
+      rigLabel: lastPreset ?? "custom-rig",
+    });
+    const blob = new Blob([yaml], { type: "text/yaml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `clusterbreak-${lastPreset ?? "rig"}.yaml`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const loadPreset = (p: Preset) => {
     run.stop();
     rig.dispatch({ type: "load", nodes: p.nodes, links: p.links });
@@ -442,6 +476,10 @@ export default function App() {
           runActive={run.run?.status === "running"}
           unpluggedIds={run.run?.unplugged ?? []}
           verdict={verdict}
+          deploy={deploy}
+          pricingFetchedAt={PRICING_FETCHED_AT}
+          pricingRegion={PRICING_REGION}
+          onDownloadTemplate={downloadTemplate}
           onRemoveNode={(id) => {
             rig.dispatch({ type: "remove", id });
             setSelectedId(null);

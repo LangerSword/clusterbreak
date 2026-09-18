@@ -9,6 +9,7 @@ import {
   type Quant,
 } from "../sim";
 import type { NodeEstimate } from "../rig/NodeMesh";
+import type { DeployPlan } from "../deploy/cfn";
 
 export interface SelectedInfo {
   id: string;
@@ -33,6 +34,10 @@ interface Props {
   runActive: boolean;
   unpluggedIds: string[];
   verdict: string | null;
+  deploy: { plan: DeployPlan; cost: { onDemand: number | null; spot: number | null } } | null;
+  pricingFetchedAt: string;
+  pricingRegion: string;
+  onDownloadTemplate: () => void;
   onRemoveNode: (id: string) => void;
   onUnlink: (id: string) => void;
   onLinkGbps: (id: string, gbps: number) => void;
@@ -55,6 +60,10 @@ export function Inspector({
   runActive,
   unpluggedIds,
   verdict,
+  deploy,
+  pricingFetchedAt,
+  pricingRegion,
+  onDownloadTemplate,
   onRemoveNode,
   onUnlink,
   onLinkGbps,
@@ -205,6 +214,52 @@ export function Inspector({
           <button className="copy-verdict" onClick={copyVerdict}>
             {copied ? "COPIED ✓" : "COPY VERDICT"}
           </button>
+        </section>
+      )}
+
+      {deploy && (
+        <section>
+          <h2>DEPLOY KIT → AWS</h2>
+          {deploy.plan.entries.length === 0 ? (
+            <p className="note">
+              No EC2-deployable nodes on this board — unified-memory and laptop parts aren't
+              offered on EC2. Place NVIDIA GPUs to plan a real deploy.
+            </p>
+          ) : (
+            <>
+              {deploy.plan.entries.map((e, i) => (
+                <div className="kv" key={`d${i}`}>
+                  <span>{e.device.name}</span>
+                  <b>{e.instanceType}</b>
+                </div>
+              ))}
+              {deploy.plan.skipped.map((s, i) => (
+                <p className="note" key={`s${i}`}>
+                  skipped: {s.device.name} — {s.reason}
+                </p>
+              ))}
+              <div className="kv">
+                <span>cost / hour</span>
+                <b>
+                  {deploy.cost.onDemand != null
+                    ? `$${deploy.cost.onDemand.toFixed(2)} on-demand · $${deploy.cost.spot?.toFixed(2) ?? "?"} spot`
+                    : "—"}
+                </b>
+              </div>
+              <p className="note">
+                Prices: AWS Pricing API snapshot {pricingFetchedAt} ({pricingRegion}); spot moves
+                constantly. Cloud silicon ≠ your card — tok/s will differ.
+              </p>
+              <button className="copy-verdict" onClick={onDownloadTemplate}>
+                DOWNLOAD CLOUDFORMATION TEMPLATE
+              </button>
+              <p className="note">
+                then run: aws cloudformation deploy --template-file &lt;file&gt; --stack-name
+                clusterbreak-rig --parameter-overrides KeyName=&lt;your-key&gt;
+                SshCidr=$(curl -s ifconfig.me)/32
+              </p>
+            </>
+          )}
         </section>
       )}
     </aside>
