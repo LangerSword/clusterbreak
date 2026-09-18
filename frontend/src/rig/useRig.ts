@@ -31,6 +31,11 @@ type Action =
   | { type: "link"; a: string; b: string }
   | { type: "unlink"; id: string }
   | { type: "setLinkGbps"; id: string; gbps: number }
+  | {
+      type: "load";
+      nodes: { deviceId: string; cell: Cell }[];
+      links: { a: number; b: number; gbps: number }[];
+    }
   | { type: "reset" };
 
 let seq = 0;
@@ -80,6 +85,20 @@ export function reducer(state: RigState, action: Action): RigState {
         ...state,
         links: state.links.map((l) => (l.id === action.id ? { ...l, gbps: action.gbps } : l)),
       };
+    case "load": {
+      const nodes: RigNode[] = action.nodes.map((n) => ({
+        id: nextId("n"),
+        deviceId: n.deviceId,
+        cell: n.cell,
+      }));
+      const links: RigLink[] = action.links.map((l) => ({
+        id: nextId("l"),
+        a: nodes[l.a]!.id,
+        b: nodes[l.b]!.id,
+        gbps: l.gbps,
+      }));
+      return { nodes, links };
+    }
     case "reset":
       return { nodes: [], links: [] };
   }

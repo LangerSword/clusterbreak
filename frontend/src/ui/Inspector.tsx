@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   footprintGb,
   usableMemoryGb,
@@ -31,6 +32,7 @@ interface Props {
   cluster: ClusterInfo;
   runActive: boolean;
   unpluggedIds: string[];
+  verdict: string | null;
   onRemoveNode: (id: string) => void;
   onUnlink: (id: string) => void;
   onLinkGbps: (id: string, gbps: number) => void;
@@ -52,11 +54,23 @@ export function Inspector({
   cluster,
   runActive,
   unpluggedIds,
+  verdict,
   onRemoveNode,
   onUnlink,
   onLinkGbps,
   onUnplug,
 }: Props) {
+  const [copied, setCopied] = useState(false);
+  const copyVerdict = () => {
+    if (!verdict) return;
+    navigator.clipboard
+      ?.writeText(verdict)
+      .then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {});
+  };
   return (
     <aside className="inspector">
       {selected ? (
@@ -71,7 +85,7 @@ export function Inspector({
             <b>{selected.device.bandwidthGbps} GB/s</b>
           </div>
           <div className="kv">
-            <span>usable (88%)</span>
+            <span>usable (−0.5 GB reserve)</span>
             <b>{usableMemoryGb(selected.device).toFixed(1)} GB</b>
           </div>
           <div className="kv">
@@ -183,6 +197,16 @@ export function Inspector({
           </div>
         ))}
       </section>
+
+      {verdict && (
+        <section>
+          <h2>VERDICT CARD</h2>
+          <pre className="verdict-card">{verdict}</pre>
+          <button className="copy-verdict" onClick={copyVerdict}>
+            {copied ? "COPIED ✓" : "COPY VERDICT"}
+          </button>
+        </section>
+      )}
     </aside>
   );
 }

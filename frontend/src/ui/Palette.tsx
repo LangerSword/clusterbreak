@@ -3,6 +3,7 @@ import type { Device, Model } from "../sim";
 import { CustomDeviceForm } from "../custom/CustomDeviceForm";
 import { ModelLibrary } from "../custom/ModelLibrary";
 import { matchCatalogDevice, probeBrowser } from "../custom/detect";
+import { PRESETS, type Preset } from "../rig/presets";
 
 const VENDOR_ORDER = ["NVIDIA", "Apple", "AMD", "Generic"] as const;
 
@@ -14,9 +15,10 @@ interface Props {
   onAddCustomDevice: (d: Device) => void;
   onAddCustomModel: (m: Model) => void;
   existingModelIds: string[];
+  onPreset: (preset: Preset) => void;
 }
 
-/** Left panel: hardware palette, live hardware detection, custom rig entry, model library. */
+/** Left panel: presets, hardware palette, live hardware detection, custom rig entry, model library. */
 export function Palette({
   devices,
   customDevices,
@@ -25,6 +27,7 @@ export function Palette({
   onAddCustomDevice,
   onAddCustomModel,
   existingModelIds,
+  onPreset,
 }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [prefill, setPrefill] = useState<{ name?: string; memoryGb?: number; key: number }>({
@@ -91,6 +94,17 @@ export function Palette({
     <aside className="palette">
       <h2>DEVICES</h2>
       <p className="hint">Click to place on the board · drag nodes to move · scroll to zoom</p>
+
+      <section className="presets">
+        <h3>PRESETS</h3>
+        {PRESETS.map((p) => (
+          <button key={p.id} className="preset-btn" onClick={() => onPreset(p)} title={p.tryThis}>
+            <span className="preset-name">{p.name}</span>
+            <span className="preset-blurb">{p.blurb}</span>
+            <span className="preset-try">try: {p.tryThis}</span>
+          </button>
+        ))}
+      </section>
 
       <button className="detect-btn" onClick={detect}>
         DETECT THIS MACHINE

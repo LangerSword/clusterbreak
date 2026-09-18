@@ -2,32 +2,36 @@ import type { Device, FitStatus, Model, Quant } from "./types";
 import { kvBytesPerToken, weightsBytes } from "./decode";
 
 /**
- * Weight-fit accounting.
+ * Weight-fit accounting — one convention, shared with the run simulator.
  *
- * A device never offers its full nominal memory to weights: display, driver and
- * runtime overhead consume a reservation. The fraction below (12%) follows the
- * conservative rule used in the calibration research; "tight" cases are flagged
- * rather than silently passed, and KV cache at the configured context is
- * included when a context length is provided.
+ * A device never offers its full nominal memory to weights: driver and runtime
+ * overhead consume a fixed reservation (0.5 GB per device). The run simulator
+ * (run.ts) uses the same reserve, so a rig's FIT verdict and its RUN behaviour
+ * cannot disagree — a flat percentage of memory was tried first and proved
+ * wrong: it declared 2× RTX 3090 "cannot fit" a 70B Q4 while the measured
+ * benchmark campaign runs exactly that configuration (anchors A3/A4).
+ *
+ * Consistent split: device capacity = memory − reserve; requested footprint =
+ * weights + KV at the configured context. With shares taken over capacity, the
+ * aggregate check (Σcapacity vs weights+KV) and the per-node run rule are
+ * algebraically the same statement.
  */
 
-export const USABLE_MEMORY_FRACTION = 0.88;
 export const RUNTIME_RESERVE_GB = 0.5;
 
 /**
- * Free headroom (GB) below which a fit is "tight". Scales with capacity class:
- * real workloads need room for KV-cache growth and runtime workspace, so a
- * "comfortable" verdict requires >= 20% of usable memory free (with an absolute
- * floor for tiny devices). Calibrated against the researched fit verdicts —
- * e.g. a 138GB model on 169GB usable unified memory (192GB machine) is tight,
- * not comfortable.
+ * Free headroom (GB) below which a fit is "tight". Real workloads need room
+ * for KV-cache growth and runtime workspace, so "comfortable" requires >= 30%
+ * of capacity free (with an absolute floor for tiny devices). Calibrated to
+ * keep the researched verdicts under the unified physical accounting — e.g. a
+ * 138GB model on 192GB unified memory is tight, not comfortable.
  */
 function tightThresholdGb(capacityGb: number): number {
-  return Math.max(1.5, 0.2 * capacityGb);
+  return Math.max(1.5, 0.3 * capacityGb);
 }
 
 export function usableMemoryGb(device: Device): number {
-  return device.memoryGb * USABLE_MEMORY_FRACTION;
+  return Math.max(0, device.memoryGb - RUNTIME_RESERVE_GB);
 }
 
 export function footprintGb(model: Model, quant: Quant, contextTokens = 0): number {
@@ -38,7 +42,7 @@ export function footprintGb(model: Model, quant: Quant, contextTokens = 0): numb
     );
   }
   const kvGb = (kvBytesPerToken(model) * contextTokens) / 1e9;
-  return wb / 1e9 + RUNTIME_RESERVE_GB + kvGb;
+  return wb / 1e9 + kvGb;
 }
 
 export function fitStatus(

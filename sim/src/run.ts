@@ -9,9 +9,10 @@ import { DEFAULT_LINK_GBPS, pipelineBreakdown, type PipelineStage } from "./pipe
  * A run holds a rig (nodes + links), a model/quant, and a growing context.
  * Each `stepRun` advances simulated time by dtMs and generates tokens at the
  * current throughput; context grows by one token per generated token, so the
- * KV cache grows with it. Nodes are checked against their physical memory —
- * the run dies when a node's footprint exceeds it (warning first at the 88%
- * usable line). Faults (unplug a node, throttle a link) recompute the
+ * KV cache grows with it. Nodes are checked against their capacity (physical
+ * memory minus the runtime reserve) — the run dies when a node's footprint
+ * exceeds it, same rule the fit check and predictOomContext use. Faults
+ * (unplug a node, throttle a link) recompute the
  * pipeline on the survivors.
  *
  * Everything here is pure: same inputs → same event timeline (tested).
@@ -91,6 +92,44 @@ export function hopGbpsForChain(
     out.push(l ? l.gbps : DEFAULT_LINK_GBPS);
   }
   return out;
+}
+
+/**
+ * Predict the context length (in tokens) at which the rig dies from KV-cache
+ * growth: the first node whose footprint (weights share + KV share + runtime
+ * reserve) outgrows its physical memory. `null` means no KV death within this
+ * configuration (e.g. models with no KV traffic). Independent of `stepRun`,
+ * computed analytically from the same accounting rules — the run simulator
+ * must agree with it (see tests).
+ */
+export function predictOomContext(
+  devices: Device[],
+  model: Model,
+  quant: Quant,
+): number | null {
+  if (devices.length === 0) return null;
+  const wb = weightsBytes(model, quant);
+  if (wb == null) {
+    throw new Error(
+      `No verified ${quant} size for ${model.id} — refusing to estimate an unmeasured weight size.`,
+    );
+  }
+  const kvPerToken = kvBytesPerToken(model);
+  if (kvPerToken === 0) return null;
+  const usable = devices.map((d) => usableMemoryGb(d));
+  const totalUsable = usable.reduce((a, b) => a + b, 0);
+
+  let death: number | null = null;
+  for (let i = 0; i < devices.length; i++) {
+    const share = (usable[i] ?? 0) / totalUsable;
+    // capacity already excludes the runtime reserve; the simulator's death rule
+    // is: weights*share + KV*share + reserve > memory  ⇔  KV*share > capacity - weights*share
+    const headroomBytes = usable[i]! * 1e9 - wb * share;
+    const ctx = headroomBytes / (kvPerToken * share);
+    const clamped = Math.max(0, ctx);
+    if (death == null || clamped < death) death = clamped;
+  }
+  return death;
 }
 
 interface Throughput {

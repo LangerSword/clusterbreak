@@ -5,7 +5,8 @@ import { fitStatus, footprintGb, usableMemoryGb } from "../fit";
 
 /**
  * Fit sanity checks — mirrors the observed fit table from the calibration
- * research (weights vs usable memory with a 12% reservation + runtime reserve).
+ * research (requested footprint vs capacity, where capacity = memory − a
+ * 0.5 GB/device runtime reserve and footprint = weights + KV at context).
  */
 
 function device(id: string) {
@@ -47,14 +48,15 @@ describe("fit status against researched fit checks", () => {
 });
 
 describe("fit accounting numerics", () => {
-  it("usable memory applies the 12% reservation", () => {
-    expect(usableMemoryGb(device("rtx3090_24gb"))).toBeCloseTo(21.12, 6);
+  it("usable memory = physical − 0.5 GB runtime reserve", () => {
+    expect(usableMemoryGb(device("rtx3090_24gb"))).toBeCloseTo(23.5, 6);
+    expect(usableMemoryGb(device("rtx3050_laptop_4gb"))).toBeCloseTo(3.5, 6);
   });
 
-  it("footprint includes the runtime reserve and grows with context", () => {
+  it("footprint = weights + KV, growing with context", () => {
     const base = footprintGb(model("llama3.1_8b"), "q4_k_m", 0);
     const long = footprintGb(model("llama3.1_8b"), "q4_k_m", 8192);
-    expect(base).toBeCloseTo(4.92 + 0.5, 6);
+    expect(base).toBeCloseTo(4.92, 6);
     expect(long).toBeGreaterThan(base);
   });
 });

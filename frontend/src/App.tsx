@@ -2,11 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import {
   DEVICES,
   MODELS,
+  applyUnplug,
+  createRun,
   estimateDecode,
   fitStatus,
   fitStatusForCapacity,
+  footprintGb,
   hopGbpsForChain,
   pipelineBreakdown,
+  predictOomContext,
   usableMemoryGb,
   type Device,
   type FitStatus,
@@ -16,6 +20,7 @@ import {
 import { Scene } from "./rig/Scene";
 import { useRig } from "./rig/useRig";
 import { useRun } from "./rig/useRun";
+import { PRESETS, type Preset } from "./rig/presets";
 import type { NodeEstimate } from "./rig/NodeMesh";
 import { useCustomDevices, useCustomModels } from "./custom/useCustom";
 import { EventConsole } from "./ui/EventConsole";
@@ -26,6 +31,12 @@ import { RunBar } from "./ui/RunBar";
 import { TopBar } from "./ui/TopBar";
 
 const DEFAULT_MODEL = "llama3.1_8b";
+
+const FIT_WORDS: Record<FitStatus, string> = {
+  comfortable: "fits comfortably",
+  tight: "tight fit",
+  does_not_fit: "does not fit",
+};
 
 export default function App() {
   const rig = useRig();
@@ -39,6 +50,7 @@ export default function App() {
   const [linkMode, setLinkMode] = useState(false);
   const [linkStartId, setLinkStartId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [lastPreset, setLastPreset] = useState<string | null>(null);
 
   const models = useMemo(() => [...MODELS, ...customModels], [customModels]);
   const model = models.find((m) => m.id === modelId) ?? models[0];
@@ -148,6 +160,107 @@ export default function App() {
     }));
   }, [rig.links, rig.nodes, devicesById]);
 
+  const verdict = useMemo((): string | null => {
+    try {
+      const nodes = rig.nodes
+        .map((n) => ({ n, device: devicesById.get(n.deviceId) }))
+        .filter((x): x is { n: (typeof rig.nodes)[number]; device: Device } => Boolean(x.device));
+      if (nodes.length === 0) return null;
+      const devices = nodes.map((x) => x.device);
+      const lines: string[] = [];
+      const linked = rig.links.length > 0 && rig.components.length === 1;
+      const minGbps = rig.links.length ? Math.min(...rig.links.map((l) => l.gbps)) : null;
+      lines.push(
+        `RIG     ${devices.map((d) => d.name).join(" + ")}${linked ? ` — linked (${minGbps} GbE)` : ""}`,
+      );
+      let fp: number | null = null;
+      try {
+        fp = footprintGb(model, quant, contextTokens);
+      } catch {
+        fp = null;
+      }
+      lines.push(
+        `MODEL   ${model.name} ${quant.toUpperCase()} @ ${contextTokens.toLocaleString("en-US")} ctx` +
+          (fp != null ? ` — ${fp.toFixed(1)} GB footprint` : " — size unverified"),
+      );
+      if (cluster.pipeline && linked) {
+        lines.push(
+          `SPEED   ${cluster.pipeline.tokensPerSec.toFixed(1)} tok/s pipelined across ${devices.length} nodes`,
+        );
+      } else {
+        const parts = nodes.map((x) => {
+          const e = estimates.get(x.n.id);
+          const tag = e?.kind === "fitted" ? "" : "~";
+          return `${x.device.name.slice(0, 18)} ${e?.tps == null ? "—" : `${tag}${e.tps.toFixed(1)}`}`;
+        });
+        lines.push(`SPEED   ${parts.join(" · ")} tok/s`);
+      }
+      const totalUsable = devices.reduce((a, d) => a + usableMemoryGb(d), 0);
+      let fitWord = "";
+      try {
+        fitWord = FIT_WORDS[fitStatusForCapacity(totalUsable, model, quant, contextTokens)];
+      } catch {
+        fitWord = "unverified size";
+      }
+      lines.push(`FIT     ${fitWord} (${totalUsable.toFixed(1)} GB usable)`);
+      let ctxDeath: number | null = null;
+      try {
+        ctxDeath = predictOomContext(devices, model, quant);
+      } catch {
+        ctxDeath = null;
+      }
+      lines.push(
+        ctxDeath == null
+          ? "WALL    no KV-cache death within memory"
+          : `WALL    KV cache outgrows VRAM at ~${(Math.round(ctxDeath / 100) / 10).toFixed(1)}K ctx`,
+      );
+      if (nodes.length >= 2) {
+        const weakest = [...nodes].sort(
+          (a, b) => usableMemoryGb(a.device) - usableMemoryGb(b.device),
+        )[0]!;
+        try {
+          const cfg = {
+            nodes: nodes.map((x) => ({ id: x.n.id, device: x.device })),
+            links: rig.links.map((l) => ({ id: l.id, a: l.a, b: l.b, gbps: l.gbps })),
+            model,
+            quant,
+            contextStart: contextTokens,
+            maxTokens: 1,
+          };
+          let s = createRun(cfg);
+          if (s.status === "dead") {
+            lines.push("BREAK   rig already does not fit — nothing runs to break");
+          } else {
+            s = applyUnplug(s, weakest.n.id);
+            lines.push(
+              s.status === "dead"
+                ? `BREAK   unplug ${weakest.device.name} (weakest) → run dies: ${s.death?.cause ?? "out of memory"}`
+                : `BREAK   unplug ${weakest.device.name} (weakest) → survivors hold on at ${s.tokensPerSec.toFixed(1)} tok/s`,
+            );
+          }
+        } catch {
+          lines.push("BREAK   unplug test unavailable for this model");
+        }
+      }
+      lines.push("DATA    sizes: Hugging Face API · efficiencies: measured campaigns (unverified marked ~)");
+      if (lastPreset) lines.push(`OPEN    ${window.location.origin}/?preset=${lastPreset}`);
+      return lines.join("\n");
+    } catch {
+      return null;
+    }
+  }, [
+    rig.nodes,
+    rig.links,
+    rig.components,
+    devicesById,
+    model,
+    quant,
+    contextTokens,
+    estimates,
+    cluster.pipeline,
+    lastPreset,
+  ]);
+
   const handleSelect = (id: string | null) => {
     if (id && linkMode) {
       if (!linkStartId) {
@@ -194,6 +307,26 @@ export default function App() {
     setLinkStartId(null);
   };
 
+  const loadPreset = (p: Preset) => {
+    run.stop();
+    rig.dispatch({ type: "load", nodes: p.nodes, links: p.links });
+    setModelId(p.modelId);
+    const target = models.find((m) => m.id === p.modelId);
+    setQuant(target?.quantSizesGb[p.quant] != null ? p.quant : "q4_k_m");
+    setContextTokens(p.contextTokens);
+    setSelectedId(null);
+    setLinkStartId(null);
+    setLastPreset(p.id);
+  };
+
+  // Deep link: /?preset=<id> fills the board on open (shareable rigs).
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("preset");
+    const p = PRESETS.find((x) => x.id === id);
+    if (p) loadPreset(p);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="app">
       <TopBar
@@ -227,6 +360,7 @@ export default function App() {
           onRemoveCustomDevice={removeCustomDevice}
           onAddCustomDevice={(d) => addCustomDevice(d)}
           onAddCustomModel={(m) => addCustomModel(m)}
+          onPreset={loadPreset}
         />
         <div className="canvas-wrap">
           <Scene
@@ -261,6 +395,7 @@ export default function App() {
           cluster={cluster}
           runActive={run.run?.status === "running"}
           unpluggedIds={run.run?.unplugged ?? []}
+          verdict={verdict}
           onRemoveNode={(id) => {
             rig.dispatch({ type: "remove", id });
             setSelectedId(null);
