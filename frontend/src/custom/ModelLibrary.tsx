@@ -29,7 +29,13 @@ interface Arch {
 }
 
 async function fetchArch(base: string): Promise<Arch | null> {
-  const candidates = [base, `unsloth/${base.split("/")[1] ?? base}`];
+  const basename = base.split("/")[1] ?? base;
+  // Gated orgs (meta-llama, google, …) 401 on raw files for anonymous users —
+  // try the unsloth mirror first so the browser console stays clean.
+  const GATED_ORGS = ["meta-llama", "google", "microsoft", "openai", "mistralai"];
+  const isGated = GATED_ORGS.some((o) => base.startsWith(`${o}/`));
+  const mirror = `unsloth/${basename}`;
+  const candidates = isGated ? [mirror, base] : [base, mirror];
   for (const c of candidates) {
     try {
       const r = await fetch(`https://huggingface.co/${c}/resolve/main/config.json`);
