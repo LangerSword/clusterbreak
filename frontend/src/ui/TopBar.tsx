@@ -1,4 +1,4 @@
-import { MODELS, type Quant } from "../sim";
+import type { Model, Quant } from "../sim";
 
 const CONTEXTS = [512, 1024, 4096, 8192, 16384, 32768];
 
@@ -10,6 +10,7 @@ const QUANTS: { value: Quant; label: string }[] = [
 
 interface Props {
   modelId: string;
+  models: Model[];
   quant: Quant;
   contextTokens: number;
   linkMode: boolean;
@@ -25,7 +26,7 @@ interface Props {
 }
 
 export function TopBar(p: Props) {
-  const model = MODELS.find((m) => m.id === p.modelId);
+  const model = p.models.find((m) => m.id === p.modelId);
   return (
     <header className="topbar">
       <div className="brand">
@@ -36,10 +37,12 @@ export function TopBar(p: Props) {
         <label>
           MODEL
           <select value={p.modelId} onChange={(e) => p.onModel(e.target.value)}>
-            {MODELS.map((m) => (
+            {p.models.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name} · {m.totalParamsB}B
+                {m.name}
+                {m.totalParamsB ? ` · ${m.totalParamsB}B` : ""}
                 {m.activeParamsB !== m.totalParamsB ? ` (${m.activeParamsB}B active)` : ""}
+                {m.architectureVerified === false ? " ⚠ arch unverified" : ""}
               </option>
             ))}
           </select>

@@ -37,6 +37,12 @@ export interface Model {
   quantSizesGb: Record<Quant, number | null>;
   source: string;
   status: string;
+  /**
+   * False for user-added models whose architecture could not be resolved from
+   * a base-model config — token-rate estimates are unavailable for those
+   * (weights-only fit information remains). Absent/true for the verified catalog.
+   */
+  architectureVerified?: boolean;
 }
 
 export interface DecodeEstimate {

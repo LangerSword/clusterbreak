@@ -17,6 +17,7 @@ import { Scene } from "./rig/Scene";
 import { useRig } from "./rig/useRig";
 import { useRun } from "./rig/useRun";
 import type { NodeEstimate } from "./rig/NodeMesh";
+import { useCustomDevices, useCustomModels } from "./custom/useCustom";
 import { EventConsole } from "./ui/EventConsole";
 import { Inspector, type ClusterInfo, type SelectedInfo } from "./ui/Inspector";
 import { Palette } from "./ui/Palette";
@@ -29,6 +30,8 @@ const DEFAULT_MODEL = "llama3.1_8b";
 export default function App() {
   const rig = useRig();
   const run = useRun();
+  const { customDevices, addCustomDevice, removeCustomDevice } = useCustomDevices();
+  const { customModels, addCustomModel } = useCustomModels();
   const [modelId, setModelId] = useState(DEFAULT_MODEL);
   const [quant, setQuant] = useState<Quant>("q4_k_m");
   const [contextTokens, setContextTokens] = useState(1024);
@@ -37,14 +40,21 @@ export default function App() {
   const [linkStartId, setLinkStartId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
-  const model = MODELS.find((m) => m.id === modelId) ?? MODELS[0];
+  const models = useMemo(() => [...MODELS, ...customModels], [customModels]);
+  const model = models.find((m) => m.id === modelId) ?? models[0];
+
+  // If the selected model disappears (custom model removed), fall back to the catalog.
+  useEffect(() => {
+    if (!models.some((m) => m.id === modelId)) setModelId(models[0].id);
+  }, [models, modelId]);
 
   // Keep the quant valid when the model changes (BF16 has no verified size for some models).
   useEffect(() => {
     if (model.quantSizesGb[quant] == null) setQuant("q4_k_m");
   }, [model, quant]);
 
-  const devicesById = useMemo(() => new Map(DEVICES.map((d) => [d.id, d])), []);
+  const allDevices = useMemo(() => [...DEVICES, ...customDevices], [customDevices]);
+  const devicesById = useMemo(() => new Map(allDevices.map((d) => [d.id, d])), [allDevices]);
 
   const estimates = useMemo(() => {
     const map = new Map<string, NodeEstimate>();
@@ -54,12 +64,14 @@ export default function App() {
       const fit = fitStatus(device, model, quant, contextTokens);
       let tps: number | null = null;
       let kind: NodeEstimate["kind"] = "estimate";
-      try {
-        const est = estimateDecode(device, model, quant, contextTokens);
-        tps = est.tokensPerSec;
-        kind = est.efficiencyKind;
-      } catch {
-        tps = null;
+      if (model.architectureVerified !== false) {
+        try {
+          const est = estimateDecode(device, model, quant, contextTokens);
+          tps = est.tokensPerSec;
+          kind = est.efficiencyKind;
+        } catch {
+          tps = null;
+        }
       }
       map.set(n.id, { tps, fit, kind });
     }
@@ -80,7 +92,11 @@ export default function App() {
       }
     }
     let pipeline: PipelineEstimate | null = null;
-    if (rig.nodes.length >= 2 && rig.components.length === 1) {
+    if (
+      rig.nodes.length >= 2 &&
+      rig.components.length === 1 &&
+      model.architectureVerified !== false
+    ) {
       try {
         const hopGbps = hopGbpsForChain(
           rig.nodes.map((n) => n.id),
@@ -182,6 +198,7 @@ export default function App() {
     <div className="app">
       <TopBar
         modelId={modelId}
+        models={models}
         quant={quant}
         contextTokens={contextTokens}
         linkMode={linkMode}
@@ -202,7 +219,15 @@ export default function App() {
         <RunBar run={run.run} speed={run.speed} onSpeed={run.setSpeed} onStop={run.stop} />
       )}
       <div className="main">
-        <Palette onAdd={(deviceId) => rig.dispatch({ type: "add", deviceId })} />
+        <Palette
+          devices={allDevices}
+          customDevices={customDevices}
+          existingModelIds={models.map((m) => m.id)}
+          onAddDevice={(deviceId) => rig.dispatch({ type: "add", deviceId })}
+          onRemoveCustomDevice={removeCustomDevice}
+          onAddCustomDevice={(d) => addCustomDevice(d)}
+          onAddCustomModel={(m) => addCustomModel(m)}
+        />
         <div className="canvas-wrap">
           <Scene
             nodes={rig.nodes}

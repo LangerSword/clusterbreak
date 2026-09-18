@@ -522,3 +522,108 @@ button:disabled {
 .nl-vram-fill.overloaded {
   background: var(--bad);
 }
+
+/* ---------- custom rig tools ---------- */
+.detect-btn {
+  width: 100%;
+  margin-bottom: 8px;
+}
+.importer {
+  margin-bottom: 8px;
+}
+.importer summary {
+  cursor: pointer;
+  color: var(--dim-2);
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+}
+.importer textarea {
+  width: 100%;
+  margin-top: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  resize: vertical;
+}
+.importer button {
+  margin-top: 6px;
+}
+.custom-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.custom-row .device-card {
+  flex: 1;
+}
+.custom-row .x {
+  padding: 0 10px;
+}
+.custom-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.custom-form input {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.74rem;
+}
+.custom-form .row2 {
+  display: flex;
+  gap: 6px;
+}
+.custom-form .row2 input {
+  flex: 1;
+  min-width: 0;
+}
+.note.error {
+  color: var(--bad);
+}
+.lib-search {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.lib-search input {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.72rem;
+}
+.lib-hit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 0.7rem;
+}
+.lib-id {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dim);
+}
+.lib-meta {
+  color: var(--dim-2);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+}
+.palette code {
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  color: var(--dim);
+}
