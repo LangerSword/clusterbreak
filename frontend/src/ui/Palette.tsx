@@ -18,7 +18,7 @@ export function Palette({ onAdd }: { onAdd: (deviceId: string) => void }) {
                 <span className="dc-name">{d.name}</span>
                 <span className="dc-spec">
                   {d.memoryGb}GB · {d.bandwidthGbps} GB/s
-                  {d.decodeEfficiency ? " · calibrated" : ""}
+                  {d.decodeEfficiency ? " · measured" : ""}
                 </span>
               </button>
             ))}
@@ -26,7 +26,8 @@ export function Palette({ onAdd }: { onAdd: (deviceId: string) => void }) {
         );
       })}
       <p className="note">
-        “calibrated” = decode efficiency fitted from published measured benchmarks (see repo docs).
+        “measured” = decode efficiency fitted from a published benchmark campaign
+        (sources in docs/data-report.md). Unmarked devices show unverified estimates.
       </p>
     </aside>
   );

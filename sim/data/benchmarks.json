@@ -1,0 +1,39 @@
+{
+  "source": "https://raw.githubusercontent.com/XiongjieDai/GPU-Benchmarks-on-LLM-Inference/main/README.md",
+  "source_note": "XiongjieDai/GPU-Benchmarks-on-LLM-Inference (llama.cpp, LLaMA 3, generation of 1024 tokens; repo last pushed 2024-05-13)",
+  "retrieved": "2026-09-18",
+  "decode_tok_s_8b_q4km": {
+    "rtx3070_8gb": 70.94,
+    "rtx3080_10gb": 106.4,
+    "rtx3080_ti_12gb": 106.71,
+    "rtx4070ti_12gb": 82.21,
+    "rtx4080_16gb": 106.22,
+    "rtx4000_ada_20gb": 58.59,
+    "rtx3090_24gb": 111.74,
+    "rtx4090_24gb": 127.74,
+    "rtx5000_ada_32gb": 89.87,
+    "a100_pcie_80gb": 138.31,
+    "h100_pcie_80gb": 144.49,
+    "apple_m1_7core_8gb": 9.72,
+    "apple_m1_max_64gb": 34.49,
+    "apple_m2_ultra_192gb": 76.28,
+    "apple_m3_max_64gb": 50.74
+  },
+  "prompt_tok_s_8b_q4km": {
+    "rtx3070_8gb": 2283.62,
+    "rtx3080_10gb": 3557.02,
+    "rtx3080_ti_12gb": 3556.67,
+    "rtx4070ti_12gb": 3653.07,
+    "rtx4080_16gb": 5064.99,
+    "rtx4000_ada_20gb": 2310.53,
+    "rtx3090_24gb": 3865.39,
+    "rtx4090_24gb": 6898.71,
+    "rtx5000_ada_32gb": 4467.46,
+    "a100_pcie_80gb": 5800.48,
+    "h100_pcie_80gb": 7760.16,
+    "apple_m1_7core_8gb": 87.26,
+    "apple_m1_max_64gb": 355.45,
+    "apple_m2_ultra_192gb": 1023.89,
+    "apple_m3_max_64gb": 678.04
+  }
+}

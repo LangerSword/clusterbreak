@@ -1,0 +1,112 @@
+{
+  "retrieved": "2026-09-18",
+  "method": "efficiency = measured_tok_s * (weights_bytes + kv_bytes(ctx=1024)) / peak_bandwidth_bytes_per_s",
+  "anchor": "Llama 3 8B Q4_K_M decode, XiongjieDai GPU-Benchmarks (2024-05-13); weights size cross-verified from the HF API",
+  "devices": {
+    "rtx3070_8gb": {
+      "efficiency": 0.8004,
+      "measuredTokS": 70.94,
+      "bandwidthGbps": 448,
+      "bandwidthSource": "TechPowerUp GPU database",
+      "basis": "fitted from measured 70.94 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    },
+    "rtx3080_10gb": {
+      "efficiency": 0.7077,
+      "measuredTokS": 106.4,
+      "bandwidthGbps": 760,
+      "bandwidthSource": "TechPowerUp GPU database",
+      "basis": "fitted from measured 106.4 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    },
+    "rtx3080_ti_12gb": {
+      "efficiency": 0.5915,
+      "measuredTokS": 106.71,
+      "bandwidthGbps": 912,
+      "bandwidthSource": "TechPowerUp GPU database",
+      "basis": "fitted from measured 106.71 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    },
+    "rtx4070ti_12gb": {
+      "efficiency": 0.8245,
+      "measuredTokS": 82.21,
+      "bandwidthGbps": 504,
+      "bandwidthSource": "TechPowerUp GPU database",
+      "basis": "fitted from measured 82.21 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    },
+    "rtx4080_16gb": {
+      "efficiency": 0.7489,
+      "measuredTokS": 106.22,
+      "bandwidthGbps": 717,
+      "bandwidthSource": "TechPowerUp GPU database",
+      "basis": "fitted from measured 106.22 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    },
+    "rtx4000_ada_20gb": {
+      "efficiency": 0.8227,
+      "measuredTokS": 58.59,
+      "bandwidthGbps": 360,
+      "bandwidthSource": "TechPowerUp GPU database",
+      "basis": "fitted from measured 58.59 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    },
+    "rtx5000_ada_32gb": {
+      "efficiency": 0.7887,
+      "measuredTokS": 89.87,
+      "bandwidthGbps": 576,
+      "bandwidthSource": "TechPowerUp GPU database",
+      "basis": "fitted from measured 89.87 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    },
+    "rtx3090_24gb": {
+      "efficiency": 0.6035,
+      "measuredTokS": 111.74,
+      "bandwidthGbps": 936,
+      "bandwidthSource": "TechPowerUp GPU database",
+      "basis": "fitted from measured 111.74 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    },
+    "rtx4090_24gb": {
+      "efficiency": 0.6406,
+      "measuredTokS": 127.74,
+      "bandwidthGbps": 1008,
+      "bandwidthSource": "TechPowerUp GPU database",
+      "basis": "fitted from measured 127.74 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    },
+    "a100_pcie_80gb": {
+      "efficiency": 0.3613,
+      "measuredTokS": 138.31,
+      "bandwidthGbps": 1935,
+      "bandwidthSource": "NVIDIA A100 datasheet (PCIe)",
+      "basis": "fitted from measured 138.31 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    },
+    "h100_pcie_80gb": {
+      "efficiency": 0.3582,
+      "measuredTokS": 144.49,
+      "bandwidthGbps": 2039,
+      "bandwidthSource": "NVIDIA H100 datasheet (PCIe)",
+      "basis": "fitted from measured 144.49 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    },
+    "apple_m1_7core_8gb": {
+      "efficiency": 0.7199,
+      "measuredTokS": 9.72,
+      "bandwidthGbps": 68.25,
+      "bandwidthSource": "Apple technical specifications",
+      "basis": "fitted from measured 9.72 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    },
+    "apple_m1_max_64gb": {
+      "efficiency": 0.4359,
+      "measuredTokS": 34.49,
+      "bandwidthGbps": 400,
+      "bandwidthSource": "Apple technical specifications (32-core GPU)",
+      "basis": "fitted from measured 34.49 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    },
+    "apple_m2_ultra_192gb": {
+      "efficiency": 0.482,
+      "measuredTokS": 76.28,
+      "bandwidthGbps": 800,
+      "bandwidthSource": "Apple technical specifications (76-core GPU)",
+      "basis": "fitted from measured 76.28 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    },
+    "apple_m3_max_64gb": {
+      "efficiency": 0.6412,
+      "measuredTokS": 50.74,
+      "bandwidthGbps": 400,
+      "bandwidthSource": "Apple technical specifications (40-core GPU)",
+      "basis": "fitted from measured 50.74 tok/s (Llama 3 8B Q4_K_M, 1024-token generation; XiongjieDai llama.cpp campaign, 2024-05-13)"
+    }
+  }
+}

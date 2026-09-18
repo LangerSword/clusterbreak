@@ -53,12 +53,15 @@ export default function App() {
       if (!device) continue;
       const fit = fitStatus(device, model, quant, contextTokens);
       let tps: number | null = null;
+      let kind: NodeEstimate["kind"] = "estimate";
       try {
-        tps = estimateDecode(device, model, quant, contextTokens).tokensPerSec;
+        const est = estimateDecode(device, model, quant, contextTokens);
+        tps = est.tokensPerSec;
+        kind = est.efficiencyKind;
       } catch {
         tps = null;
       }
-      map.set(n.id, { tps, fit });
+      map.set(n.id, { tps, fit, kind });
     }
     return map;
   }, [rig.nodes, devicesById, model, quant, contextTokens]);

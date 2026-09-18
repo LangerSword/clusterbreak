@@ -27,7 +27,7 @@ cd frontend && npm install && npm run dev
 ```
 
 ## Honesty notes
-The simulator is calibrated against published, cited measurements; every simplification is documented in `docs/limitations.md` and surfaced in-app. Numbers are estimates, not measurements of your hardware.
+Every model size is pulled live from the Hugging Face API, and every device's decode efficiency is fitted from measured llama.cpp benchmark campaigns — one command (`python3 tools/refresh_data.py`) refreshes and re-verifies the whole dataset (see `docs/data-report.md`). Devices with no published measurement are marked **unverified** in-app rather than shown a fabricated number. Every simplification is documented in `docs/limitations.md`.
 
 ## AI tools used
 Hermes Agent — research, scaffolding and development assistance (listed per event rules).

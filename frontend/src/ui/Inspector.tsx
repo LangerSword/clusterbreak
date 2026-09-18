@@ -79,7 +79,7 @@ export function Inspector({
             <b>
               {selected.device.decodeEfficiency
                 ? `${selected.device.decodeEfficiency.toFixed(3)} (fitted)`
-                : "0.600 (default)"}
+                : "0.600 (default — no published measurement)"}
             </b>
           </div>
           {selected.device.efficiencyBasis && <p className="note">{selected.device.efficiencyBasis}</p>}

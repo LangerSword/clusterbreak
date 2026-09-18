@@ -23,6 +23,8 @@ const FIT_CLASS: Record<FitStatus, string> = {
 export interface NodeEstimate {
   tps: number | null;
   fit: FitStatus;
+  /** "fitted" = efficiency comes from a measured benchmark; "estimate" = default parameter. */
+  kind: "fitted" | "estimate";
 }
 
 interface Props {
@@ -136,7 +138,9 @@ export function NodeMesh({
                 {device.memoryGb}GB · {device.bandwidthGbps} GB/s
               </div>
               <div className="nl-tps">
-                {estimate.tps == null ? "no size data" : `${estimate.tps.toFixed(1)} tok/s`}
+                {estimate.tps == null
+                  ? "no size data"
+                  : `${estimate.kind === "estimate" ? "~" : ""}${estimate.tps.toFixed(1)} tok/s`}
               </div>
             </>
           )}

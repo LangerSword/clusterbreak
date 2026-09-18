@@ -1,0 +1,175 @@
+{
+  "retrieved": "2026-09-18",
+  "method": "Hugging Face API ?blobs=true; split files summed",
+  "models": {
+    "qwen3.5_4b": {
+      "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
+      "q4_k_m": {
+        "bytes": 3013027808,
+        "files": [
+          "Qwen_Qwen3.5-4B-Q4_K_M.gguf"
+        ]
+      },
+      "q8_0": {
+        "bytes": 4622131168,
+        "files": [
+          "Qwen_Qwen3.5-4B-Q8_0.gguf"
+        ]
+      },
+      "bf16": {
+        "bytes": 10013612896,
+        "files": [
+          "Qwen_Qwen3.5-4B-bf16.gguf",
+          "mmproj-Qwen_Qwen3.5-4B-bf16.gguf",
+          "mmproj-Qwen_Qwen3.5-4B-f16.gguf"
+        ]
+      }
+    },
+    "llama3.1_8b": {
+      "repo": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+      "q4_k_m": {
+        "bytes": 4920739232,
+        "files": [
+          "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"
+        ]
+      },
+      "q8_0": {
+        "bytes": 8540775840,
+        "files": [
+          "Meta-Llama-3.1-8B-Instruct-Q8_0.gguf"
+        ]
+      },
+      "bf16": null
+    },
+    "gemma3_27b": {
+      "repo": "bartowski/google_gemma-3-27b-it-GGUF",
+      "q4_k_m": {
+        "bytes": 16546404992,
+        "files": [
+          "google_gemma-3-27b-it-Q4_K_M.gguf"
+        ]
+      },
+      "q8_0": {
+        "bytes": 28707605120,
+        "files": [
+          "google_gemma-3-27b-it-Q8_0.gguf"
+        ]
+      },
+      "bf16": {
+        "bytes": 55742753152,
+        "files": [
+          "google_gemma-3-27b-it-bf16/google_gemma-3-27b-it-bf16-00001-of-00002.gguf",
+          "google_gemma-3-27b-it-bf16/google_gemma-3-27b-it-bf16-00002-of-00002.gguf",
+          "mmproj-google_gemma-3-27b-it-bf16.gguf",
+          "mmproj-google_gemma-3-27b-it-f16.gguf"
+        ]
+      }
+    },
+    "qwen3_32b": {
+      "repo": "bartowski/Qwen_Qwen3-32B-GGUF",
+      "q4_k_m": {
+        "bytes": 19762149696,
+        "files": [
+          "Qwen_Qwen3-32B-Q4_K_M.gguf"
+        ]
+      },
+      "q8_0": {
+        "bytes": 34817719616,
+        "files": [
+          "Qwen_Qwen3-32B-Q8_0.gguf"
+        ]
+      },
+      "bf16": {
+        "bytes": 65531575584,
+        "files": [
+          "Qwen_Qwen3-32B-bf16/Qwen_Qwen3-32B-bf16-00001-of-00002.gguf",
+          "Qwen_Qwen3-32B-bf16/Qwen_Qwen3-32B-bf16-00002-of-00002.gguf"
+        ]
+      }
+    },
+    "qwen3.5_35b_a3b": {
+      "repo": "bartowski/Qwen_Qwen3.5-35B-A3B-GGUF",
+      "q4_k_m": {
+        "bytes": 22285080384,
+        "files": [
+          "Qwen_Qwen3.5-35B-A3B-Q4_K_M.gguf"
+        ]
+      },
+      "q8_0": {
+        "bytes": 37812647744,
+        "files": [
+          "Qwen_Qwen3.5-35B-A3B-Q8_0.gguf"
+        ]
+      },
+      "bf16": {
+        "bytes": 72868047808,
+        "files": [
+          "Qwen_Qwen3.5-35B-A3B-bf16/Qwen_Qwen3.5-35B-A3B-bf16-00001-of-00002.gguf",
+          "Qwen_Qwen3.5-35B-A3B-bf16/Qwen_Qwen3.5-35B-A3B-bf16-00002-of-00002.gguf",
+          "mmproj-Qwen_Qwen3.5-35B-A3B-bf16.gguf",
+          "mmproj-Qwen_Qwen3.5-35B-A3B-f16.gguf"
+        ]
+      }
+    },
+    "llama3.3_70b": {
+      "repo": "bartowski/Llama-3.3-70B-Instruct-GGUF",
+      "q4_k_m": {
+        "bytes": 42520398816,
+        "files": [
+          "Llama-3.3-70B-Instruct-Q4_K_M.gguf"
+        ]
+      },
+      "q8_0": {
+        "bytes": 74975055008,
+        "files": [
+          "Llama-3.3-70B-Instruct-Q8_0/Llama-3.3-70B-Instruct-Q8_0-00001-of-00002.gguf",
+          "Llama-3.3-70B-Instruct-Q8_0/Llama-3.3-70B-Instruct-Q8_0-00002-of-00002.gguf"
+        ]
+      },
+      "bf16": {
+        "bytes": 141117918624,
+        "files": [
+          "Llama-3.3-70B-Instruct-f16/Llama-3.3-70B-Instruct-f16-00001-of-00004.gguf",
+          "Llama-3.3-70B-Instruct-f16/Llama-3.3-70B-Instruct-f16-00002-of-00004.gguf",
+          "Llama-3.3-70B-Instruct-f16/Llama-3.3-70B-Instruct-f16-00003-of-00004.gguf",
+          "Llama-3.3-70B-Instruct-f16/Llama-3.3-70B-Instruct-f16-00004-of-00004.gguf"
+        ]
+      }
+    },
+    "gpt_oss_120b": {
+      "repo": "bartowski/openai_gpt-oss-120b-GGUF",
+      "q4_k_m": {
+        "bytes": 62841713344,
+        "files": [
+          "openai_gpt-oss-120b-Q4_K_M/openai_gpt-oss-120b-Q4_K_M-00001-of-00002.gguf",
+          "openai_gpt-oss-120b-Q4_K_M/openai_gpt-oss-120b-Q4_K_M-00002-of-00002.gguf"
+        ]
+      },
+      "q8_0": {
+        "bytes": 63387346368,
+        "files": [
+          "openai_gpt-oss-120b-Q8_0/openai_gpt-oss-120b-Q8_0-00001-of-00002.gguf",
+          "openai_gpt-oss-120b-Q8_0/openai_gpt-oss-120b-Q8_0-00002-of-00002.gguf"
+        ]
+      },
+      "bf16": {
+        "bytes": 65369016768,
+        "files": [
+          "openai_gpt-oss-120b-bf16/openai_gpt-oss-120b-bf16-00001-of-00002.gguf",
+          "openai_gpt-oss-120b-bf16/openai_gpt-oss-120b-bf16-00002-of-00002.gguf"
+        ]
+      }
+    },
+    "minimax_m2.5": {
+      "repo": "ox-ox/MiniMax-M2.5-GGUF",
+      "q4_k_m": {
+        "bytes": 138342383872,
+        "files": [
+          "minimax-m2.5-Q4_K_M.gguf"
+        ]
+      },
+      "q8_0": null,
+      "bf16": null
+    }
+  }
+}

@@ -17,6 +17,9 @@
 - **10:29** — **Run simulator engine**: deterministic token loop (KV grows with context), fault injection (unplug a node, throttle a link), death detection with repair lists — 9 new tests, engine at **34/34**.
 - **10:31–10:36** — **Break-it mode live**: RUN button, live VRAM meters on each node, event console over the board, UNPLUG / link-throttle fault controls, and a postmortem card ("what died and why" + repairs + event trail).
 - **10:36** — Verified on the deployed bundle (scripted browser): Llama-3.3-70B across two wired RTX 3090s ran at 13.1 tok/s → unplugging one node killed it with the exact cause (survivors need 43.56 GB, have 24 GB) + repairs; throttling the link 1 → 0.01 GbE moved transfer time 0.13 → 13.11 ms/token live; **zero console errors**. Screenshots: `/tmp/cb-shot3.png` (postmortem), `/tmp/cb-shot4.png` (throttled run).
+- **Data pipeline (built after 10:36; see clock note)** — `tools/refresh_data.py` now regenerates the whole dataset from live sources: measured benchmark tables (15 decode + 15 prompt rows), exact GGUF sizes from the Hugging Face API, and **15 device efficiencies fitted from measured runs**. It immediately killed an estimate: Qwen3.5-35B-A3B Q4_K_M was 20.5 GB "estimated" in the research — the live source says **22.29 GB**. The engine is now data-driven (JSON → engine), and devices without a measured anchor are marked unverified in-app instead of showing a default-parameter number. 34/34 engine tests still green; `docs/data-report.md` documents method, sources and gaps.
+
+> **Clock note:** this machine's system clock resynced backwards by ~4h45m during the session (reading 10:42, then 05:53). Entries above record the clock as read at the time; durations between entries are the reliable measure. Deadline estimate from the event site's countdown is unaffected in substance (Sunday close, exact time still being finalised).
 
 ## Learnings (kept for the writeup)
 
@@ -27,3 +30,6 @@
 - **Negative zero is real**: `Math.round(-0.4)` returns `-0`, which deep-equality assertions and cell keys can trip on; grid cells normalize it.
 - **The automation browser runs with `--disable-gpu`** (no WebGL, R3F silently can't render); verifying 3D pages needs a separate headless run with software GL (`--use-angle=swiftshader`).
 - **UI layout shifts invalidate cached coordinates in scripted browser tests**: the run bar appearing pushes the canvas down, so element positions captured before it must be re-read after the shift (this bit the first break-it verification run).
+- **The Hugging Face API (`?blobs=true`) returns exact GGUF blob sizes** — no size in this project is hand-entered any more; hand-entered numbers are how a 20.5 GB "estimate" survived until a live check said 22.29 GB.
+- **Measured benchmark tables need defensive parsing**: bold markdown (`**144.49**`) and non-ASCII dashes (U+2011 in "32‑Core") silently dropped rows until normalized.
+- **A single default efficiency constant is wrong by construction**: fitted values span 0.36 (H100 PCIe on an 8B model) to 0.83 (RTX 4000 Ada) — fitting per device from measured runs is the honest minimum.
