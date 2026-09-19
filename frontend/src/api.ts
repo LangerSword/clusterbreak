@@ -26,3 +26,111 @@ export async function fetchRun(id: string): Promise<ReportPayload> {
   if (!data.report) throw new Error("malformed response");
   return data.report;
 }
+
+/* ------------------------------------------------------------------ *
+ * Secure AWS connect (v0.3.0 API)
+ *
+ * Clusterbreak never sees or stores AWS keys. The user deploys a small
+ * connect stack in their own account; it creates a role that trusts the
+ * Clusterbreak backend role ARN + an ExternalId, scoped to
+ * clusterbreak-* stacks only. The backend assumes that role via STS and
+ * mints a session id. Deleting the stack revokes access instantly.
+ * ------------------------------------------------------------------ */
+
+/** Region the whole product runs in (matches the backend). */
+export const AWS_REGION = "ap-south-1";
+/** The backend role the connect stack trusts (public — it is a principal ARN). */
+export const CONNECT_PRINCIPAL_ARN = "arn:aws:iam::703651068111:role/clusterbreak-lambda-role";
+/** Public S3 copy of the connect template for the one-click console flow. */
+export const CONNECT_TEMPLATE_URL =
+  "https://clusterbreak-templates-703651068111.s3.ap-south-1.amazonaws.com/connect-role.yaml";
+
+export interface AwsSession {
+  sessionId: string;
+  accountId: string;
+  region: string;
+  gpuQuotaVcpus: number | null;
+  expiresInHours: number;
+}
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => ({}))) as T & { ok?: boolean; error?: string; detail?: string };
+  if (!res.ok || data.ok === false) {
+    const why = data.detail ? `${data.error}: ${data.detail}` : (data.error ?? `http ${res.status}`);
+    throw new Error(why);
+  }
+  return data;
+}
+
+export function connectAws(roleArn: string, externalId: string): Promise<AwsSession> {
+  return post<AwsSession>("/aws/connect", { roleArn, externalId });
+}
+
+export interface ProvisionArgs {
+  sessionId: string;
+  stackName: string;
+  template: string;
+  keyName: string;
+  sshCidr: string;
+  mode: "on-demand" | "spot";
+  gpuMode: "gpu" | "cpu";
+  contextTokens: number;
+  modelUrl?: string | null;
+  autoTeardownHours: number;
+}
+
+export interface ProvisionResult {
+  stackId: string;
+  stackName: string;
+  accountId: string;
+  autoTeardownHours: number | null;
+}
+
+export function provisionRig(args: ProvisionArgs): Promise<ProvisionResult> {
+  return post<ProvisionResult>("/aws/provision", args);
+}
+
+export interface StackStatus {
+  status: string;
+  reason: string | null;
+  outputs: Record<string, string>;
+  accountId: string;
+}
+
+export async function getStackStatus(sessionId: string, stackName: string): Promise<StackStatus> {
+  const res = await fetch(`${API_BASE}/aws/status/${encodeURIComponent(sessionId)}/${encodeURIComponent(stackName)}`);
+  const data = (await res.json().catch(() => ({}))) as StackStatus & { ok?: boolean; error?: string; detail?: string };
+  if (!res.ok || data.ok === false) {
+    throw new Error(data.detail ? `${data.error}: ${data.detail}` : (data.error ?? `http ${res.status}`));
+  }
+  return data;
+}
+
+export function teardownRig(sessionId: string, stackName: string): Promise<{ stackName: string; status: string }> {
+  return post<{ stackName: string; status: string }>("/aws/teardown", { sessionId, stackName });
+}
+
+/** A fresh per-user secret for the connect stack's trust policy. */
+export function generateExternalId(): string {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return "cb-" + Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+}
+
+/** One-click CloudFormation console link, prefilled with our template + params. */
+export function connectStackUrl(externalId: string): string {
+  const base = `https://${AWS_REGION}.console.aws.amazon.com/cloudformation/home?region=${AWS_REGION}`;
+  const params = new URLSearchParams({
+    templateURL: CONNECT_TEMPLATE_URL,
+    stackName: "clusterbreak-connect",
+    param_ExternalId: externalId,
+    param_ClusterbreakPrincipalArn: CONNECT_PRINCIPAL_ARN,
+  });
+  return `${base}#/stacks/quickcreate?${params.toString()}`;
+}

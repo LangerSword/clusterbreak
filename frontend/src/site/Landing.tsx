@@ -12,9 +12,13 @@ import {
 } from "../sim";
 import pricing from "../../../sim/data/aws-pricing.json";
 import benchmarks from "../../../sim/data/benchmarks.json";
+import efficiencies from "../../../sim/data/efficiencies.json";
 
 const CONTEXT_TOKENS = 4096;
 const API_BASE = "https://wa7rwqxhk0.execute-api.ap-south-1.amazonaws.com";
+
+type PriceRow = { onDemandUsdPerHour: number | null; spotUsdPerHour: number | null };
+const PRICES = pricing.instances as Record<string, PriceRow>;
 
 /** Footer API status — pings /health once, degrades silently, never blocks. */
 function ApiStatus() {
@@ -36,9 +40,7 @@ function ApiStatus() {
   }, []);
   return (
     <span className="api-status" aria-live="polite">
-      {state.kind === "checking" && <span className="api-dot checking" />}
-      {state.kind === "ok" && <span className="api-dot ok" />}
-      {state.kind === "down" && <span className="api-dot down" />}
+      <span className={`api-dot ${state.kind === "ok" ? "ok" : state.kind === "down" ? "down" : "checking"}`} />
       {state.kind === "ok"
         ? `api operational · v${state.version}`
         : state.kind === "down"
@@ -85,6 +87,21 @@ function useReveal() {
     );
     els.forEach((el) => io.observe(el));
     return () => io.disconnect();
+  }, []);
+}
+
+/** Bento cards track the cursor so the glow follows it (CSS var, no re-render). */
+function useCursorGlow() {
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const card = (e.target as HTMLElement)?.closest?.(".bento-card") as HTMLElement | null;
+      if (!card) return;
+      const r = card.getBoundingClientRect();
+      card.style.setProperty("--mx", `${e.clientX - r.left}px`);
+      card.style.setProperty("--my", `${e.clientY - r.top}px`);
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => window.removeEventListener("pointermove", onMove);
   }, []);
 }
 
@@ -145,12 +162,13 @@ function Instrument() {
   return (
     <div className="instrument" role="region" aria-label="Live verdict — runs the real simulation engine">
       <div className="instrument-head">
-        <span className="label">Live verdict · real engine</span>
-        <span className="live-dot">in your browser</span>
+        <span className="live-dot" aria-hidden="true" />
+        <span className="t">LIVE VERDICT · REAL ENGINE</span>
+        <span className="s">in your browser</span>
       </div>
       <div className="instrument-controls">
-        <div className="field">
-          <label htmlFor="hero-device">Device</label>
+        <label htmlFor="hero-device">
+          Device
           <select id="hero-device" value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
             {measured.map((d) => (
               <option key={d.id} value={d.id}>
@@ -158,9 +176,9 @@ function Instrument() {
               </option>
             ))}
           </select>
-        </div>
-        <div className="field">
-          <label htmlFor="hero-model">Model · Q4_K_M</label>
+        </label>
+        <label htmlFor="hero-model">
+          Model · Q4_K_M
           <select id="hero-model" value={modelId} onChange={(e) => setModelId(e.target.value)}>
             {models.map((m) => (
               <option key={m.id} value={m.id}>
@@ -168,47 +186,82 @@ function Instrument() {
               </option>
             ))}
           </select>
-        </div>
+        </label>
       </div>
       <div className="readout" aria-live="polite">
         <div className="readout-main">
-          <span className="readout-num">
-            {shown == null ? "—" : shown.toFixed(1)}
-          </span>
+          <span className="readout-num">{shown == null ? "—" : shown.toFixed(1)}</span>
           <span className="readout-unit">tok/s decode @ {CONTEXT_TOKENS.toLocaleString()} ctx</span>
         </div>
         <div className="readout-rows">
           <div className="readout-row">
-            <span className="k">fit on {device ? `${usableMemoryGb(device).toFixed(1)} GB usable` : "—"}</span>
-            <span className="v">
-              {result ? (
-                <span className={`chip ${FIT_WORD[result.fit].cls}`}>{FIT_WORD[result.fit].label}</span>
-              ) : (
-                "—"
-              )}
+            <span>
+              {device ? <span className="chip-vendor" data-vendor={device.vendor}>{device.vendor}</span> : null}
+            </span>
+            <span>
+              {device ? `${usableMemoryGb(device).toFixed(1)} GB usable` : "—"}
             </span>
           </div>
           <div className="readout-row">
-            <span className="k">model footprint</span>
-            <span className="v">{result ? `${result.fp.toFixed(2)} GB` : "—"}</span>
+            <span>fit verdict</span>
+            <b className={result ? FIT_WORD[result.fit].cls : ""}>
+              {result ? FIT_WORD[result.fit].label : "—"}
+            </b>
           </div>
           <div className="readout-row">
-            <span className="k">KV wall</span>
-            <span className="v">
+            <span>model footprint</span>
+            <b>{result ? `${result.fp.toFixed(2)} GB` : "—"}</b>
+          </div>
+          <div className="readout-row">
+            <span>KV wall</span>
+            <b>
               {result == null ? "—" : result.wall == null ? "none in memory" : `~${Math.round(result.wall / 1000)}K ctx`}
-            </span>
+            </b>
           </div>
           <div className="readout-row">
-            <span className="k">efficiency source</span>
-            <span className="v">{result?.kind === "fitted" ? "measured campaign (fitted)" : "unverified default"}</span>
+            <span>efficiency source</span>
+            <b>{result?.kind === "fitted" ? "measured campaign (fitted)" : "unverified default"}</b>
           </div>
         </div>
       </div>
       <p className="instrument-note">
-        This is the simulator's engine, live — same code the app runs. Sizes are pulled from the Hugging Face
-        API; device efficiencies are fitted from published llama.cpp benchmark runs.{" "}
+        This is the simulator's engine, live — the same code the app runs. Sizes come from the Hugging Face API;
+        device efficiencies are fitted from published llama.cpp benchmark runs.{" "}
         <a href="/docs.html#data">How the numbers work →</a>
       </p>
+    </div>
+  );
+}
+
+/** Real measured anchors, straight from the fitted data file. */
+function DeviceMarquee() {
+  const rows = useMemo(() => {
+    const table = (efficiencies as { devices: Record<string, { measuredTokS?: number; efficiency?: number }> }).devices;
+    return DEVICES.filter((d) => d.decodeEfficiency != null).map((d) => ({
+      id: d.id,
+      name: d.name,
+      vendor: d.vendor,
+      gb: d.memoryGb,
+      bw: d.bandwidthGbps,
+      measured: table[d.id]?.measuredTokS ?? null,
+    }));
+  }, []);
+  const doubled = [...rows, ...rows];
+  return (
+    <div className="marquee" aria-label="Devices with measured benchmark anchors">
+      <div className="marquee-track">
+        {doubled.map((d, i) => (
+          <div className="dev-chip" key={`${d.id}-${i}`} data-vendor={d.vendor} aria-hidden={i >= rows.length}>
+            <span className="n">{d.name}</span>
+            <span className={`v${d.measured == null ? " est" : ""}`}>
+              {d.measured == null ? "est." : `${d.measured.toFixed(1)} tok/s`}
+            </span>
+            <span className="m">
+              {d.gb}GB · {d.bw} GB/s
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -222,15 +275,12 @@ const SHOTS = {
 export function Landing() {
   const scrolled = useScrolled();
   useReveal();
+  useCursorGlow();
 
   const fittedCount = DEVICES.filter((d) => d.decodeEfficiency != null).length;
   const modelCount = MODELS.length;
   const benchmarkRows = Object.keys(benchmarks.decode_tok_s_8b_q4km).length;
   const pricingDate = pricing.fetchedAt.slice(0, 10);
-  const g5 = (pricing.instances as Record<string, { onDemandUsdPerHour: number | null; spotUsdPerHour: number | null }>)["g5.xlarge"];
-  const g6 = (pricing.instances as Record<string, { onDemandUsdPerHour: number | null; spotUsdPerHour: number | null }>)["g6.xlarge"];
-  const g4dn = (pricing.instances as Record<string, { onDemandUsdPerHour: number | null; spotUsdPerHour: number | null }>)["g4dn.xlarge"];
-  const g6e = (pricing.instances as Record<string, { onDemandUsdPerHour: number | null; spotUsdPerHour: number | null }>)["g6e.xlarge"];
 
   return (
     <>
@@ -238,20 +288,24 @@ export function Landing() {
         Skip to content
       </a>
       <nav className={`nav${scrolled ? " scrolled" : ""}`} aria-label="Main">
-        <div className="nav-inner">
+        <div className="wrap nav-inner">
           <a className="nav-brand" href="/">
-            <span className="dot" aria-hidden="true" />
+            <span className="nav-mark" aria-hidden="true">
+              ⌁
+            </span>
             clusterbreak
           </a>
           <div className="nav-links">
             <a href="#features">Features</a>
-            <a href="#how">How it works</a>
+            <a href="#breakit">Break it</a>
             <a href="#deploy">Deploy kit</a>
             <a href="/docs.html">Docs</a>
             <a href="https://github.com/LangerSword/clusterbreak" target="_blank" rel="noreferrer">
               GitHub
             </a>
-            <a className="nav-cta" href="/app.html">
+          </div>
+          <div className="nav-cta">
+            <a className="btn primary sm" href="/app.html">
               Open the simulator
             </a>
           </div>
@@ -260,24 +314,33 @@ export function Landing() {
 
       <main id="main">
         <header className="hero">
+          <div className="aurora" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </div>
+          <div className="hero-grid" aria-hidden="true" />
           <div className="wrap hero-inner">
             <div>
-              <div className="eyebrow">GPU inference, without the guesswork</div>
+              <div className="eyebrow">
+                <span className="api-dot ok" aria-hidden="true" />
+                GPU inference, without the guesswork
+              </div>
               <h1>
                 Build a rig. Run a model.
                 <br />
-                <span className="accent">Break it on purpose.</span>
+                <span className="grad">Break it on purpose.</span>
               </h1>
               <p className="hero-sub">
-                Clusterbreak simulates AI inference across real hardware — from a single laptop GPU to a wired
+                Clusterbreak simulates AI inference across real hardware — a single laptop GPU or a wired
                 multi-node cluster — then lets you pull a cable, throttle a link, and read exactly what died and
-                why. Every number is measured or explicitly marked as unverified.
+                why. Every number is measured, or visibly marked as unverified.
               </p>
               <div className="hero-ctas">
                 <a className="btn primary" href="/app.html">
-                  Open the simulator
+                  Open the simulator →
                 </a>
-                <a className="btn" href="/docs.html">
+                <a className="btn ghost" href="/docs.html">
                   Read the docs
                 </a>
               </div>
@@ -304,76 +367,147 @@ export function Landing() {
           </div>
         </header>
 
-        <section className="section" id="features">
+        <DeviceMarquee />
+
+        <section className="band" id="features">
           <div className="wrap">
             <div className="section-head reveal">
-              <h2>Planning tools answer “will it run.” Clusterbreak shows you why it dies.</h2>
+              <div className="eyebrow">What it does</div>
+              <h2>
+                Planning tools answer “will it run.”
+                <br />
+                Clusterbreak shows you why it dies.
+              </h2>
               <p>
-                Fit calculators stop at a yes or no. A rig is a system — memory is split, links have speed, and
-                one failed node takes the rest down with it. Clusterbreak models the system.
+                Fit calculators stop at yes or no. A rig is a system — memory is split, links have speed, and one
+                failed node takes the rest with it. Clusterbreak models the system.
               </p>
             </div>
             <div className="bento">
-              <div className="cell wide reveal">
-                <span className="cell-tag">Break-it physics</span>
-                <h3>Pull a cable mid-run. Watch the cluster react.</h3>
+              <div className="bento-card wide reveal" data-accent="bad">
+                <div className="bento-icon">⚡</div>
+                <h3>Break-it physics</h3>
                 <p>
                   Runs stream tokens at the speed the rig can actually sustain — pipeline stages, per-hop link
-                  costs, KV cache growing with context. Unplug a node or drop a link to 0.01 GbE and the run
-                  dies the way it would in a rack: the postmortem names the cause, the numbers, and the repairs.
+                  costs, KV cache growing with context. Unplug a node or drop a link to 0.01 GbE and the run dies
+                  the way it would in a rack.
                 </p>
-                <img src={SHOTS.postmortem} alt="Clusterbreak postmortem card: an unplugged RTX 3090 killed a 70B run, with the survivors' memory shortfall and suggested repairs" loading="lazy" />
+                <div className="meta">unplug · throttle · OOM — with a causal postmortem</div>
               </div>
-              <div className="cell half reveal">
-                <span className="cell-tag">Verdict card</span>
-                <h3>A verdict you can paste into a thread.</h3>
+              <div className="bento-card third reveal" data-accent="ok">
+                <div className="bento-icon">▤</div>
+                <h3>Verdict card</h3>
                 <p>
-                  Every rig gets a copyable card: throughput, fit verdict, the KV-cache wall, the weakest-node
-                  prediction, and where each number came from.
+                  Every rig gets a copyable card: throughput, fit, the KV wall, the weakest node — and where each
+                  number came from.
                 </p>
-                <img src={SHOTS.verdict} alt="Verdict card showing 13.2 tok/s pipelined across two RTX 3090s, a tight fit, and a KV wall at ~13.7K context" loading="lazy" />
+                <div className="meta">paste-ready, provenance included</div>
               </div>
-              <div className="cell third reveal">
-                <span className="cell-tag">Detect</span>
-                <h3>Your machine, one click.</h3>
+              <div className="bento-card third reveal" data-accent="violet">
+                <div className="bento-icon">⌖</div>
+                <h3>Detect your machine</h3>
                 <p>
-                  The simulator reads your browser's GPU and CPU, matches it against the device catalog, and
-                  drops it on the board. A local probe script covers the rest.
+                  The simulator reads your browser's GPU and CPU, matches it against the catalog, and drops it on
+                  the board. A local probe covers the rest.
                 </p>
+                <div className="meta">one click, no install</div>
               </div>
-              <div className="cell third reveal">
-                <span className="cell-tag">Live data</span>
-                <h3>Sizes straight from Hugging Face.</h3>
+              <div className="bento-card third reveal" data-accent="nv">
+                <div className="bento-icon">◈</div>
+                <h3>Live data, no estimates</h3>
                 <p>
-                  Search any GGUF repo in the app; sizes come from the HF API blob list, architectures from the
-                  base model config. No typed-in numbers.
+                  GGUF sizes come from the Hugging Face blob API; architectures from the base model's config.
+                  Nothing on the board is a typed-in number.
                 </p>
+                <div className="meta">refreshable by script</div>
               </div>
-              <div className="cell third reveal">
-                <span className="cell-tag">Share</span>
-                <h3>Postmortems that travel.</h3>
+              <div className="bento-card third reveal" data-accent="warn">
+                <div className="bento-icon">↗</div>
+                <h3>Postmortems that travel</h3>
                 <p>
-                  One click stores the run and returns a link. Anyone who opens it sees the same verdict card,
-                  the death cause, and the data provenance.
+                  One click stores the run and returns a link. Anyone who opens it sees the same verdict, the
+                  death cause, and the data provenance.
                 </p>
+                <div className="meta">90-day links, no account</div>
               </div>
-              <div className="cell wide reveal">
-                <span className="cell-tag">The board</span>
-                <h3>An interactive rig you can rearrange.</h3>
+              <div className="bento-card third reveal" data-accent="aws">
+                <div className="bento-icon">☁</div>
+                <h3>Deploy kit → your AWS</h3>
                 <p>
-                  Place devices, wire them with LINK MODE, drag nodes around a 3D board. Presets seed real
-                  configurations — two laptops over 1GbE, the classic 2×3090 homelab, a Mac Studio, a Steam
-                  Deck — so the first useful answer takes one click.
+                  Turn the simulated rig into a real CloudFormation stack — VPC, GPU nodes, llama.cpp behind an
+                  OpenAI-compatible endpoint — in your own account.
                 </p>
-                <img src={SHOTS.board} alt="The Clusterbreak board: two RTX 3090 nodes wired with a 10GbE link, inspector open with the rig summary and verdict card" loading="lazy" />
+                <div className="meta">scoped role, auto-teardown</div>
+              </div>
+              <div className="bento-card wide reveal" data-accent="violet">
+                <div className="bento-icon">▦</div>
+                <h3>An interactive rig you can rearrange</h3>
+                <p>
+                  Place devices on a 3D board, wire them with LINK MODE, drag nodes around. Presets seed real
+                  configurations — two laptops over 1GbE, the classic 2×3090 homelab, a Mac Studio, a Steam Deck
+                  — so the first useful answer takes one click.
+                </p>
+                <div className="meta">presets · custom devices · custom models</div>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="section" id="how">
+        <section className="band" id="breakit">
+          <div className="wrap showcase">
+            <figure className="shot reveal">
+              <img
+                src={SHOTS.postmortem}
+                alt="Clusterbreak postmortem card: an unplugged RTX 3090 killed a 70B run, showing the survivors' memory shortfall and suggested repairs"
+                loading="lazy"
+              />
+              <figcaption>captured from a real run in the simulator — unplugging a 3090 mid-stream</figcaption>
+            </figure>
+            <div className="reveal">
+              <div className="eyebrow">The part nobody else ships</div>
+              <h2 style={{ fontSize: "clamp(1.6rem, 3vw, 2.3rem)", margin: "16px 0 12px" }}>
+                A failure you can read, not guess at.
+              </h2>
+              <p style={{ color: "var(--dim)", margin: 0 }}>
+                When a run dies, Clusterbreak names the cause with the numbers that produced it — then gives you
+                the repairs, in order of how much they cost you.
+              </p>
+              <ul className="cause-list">
+                <li>
+                  <span className="tick">CAUSE</span>
+                  <span>
+                    Node removed mid-stream → the survivors' combined usable memory no longer covers weights +
+                    KV, so the pipeline can't resume.
+                  </span>
+                </li>
+                <li>
+                  <span className="tick">NUMBERS</span>
+                  <span>
+                    Throughput before the break, the shortfall in GB, and the context at which the KV cache
+                    would have crossed the wall anyway.
+                  </span>
+                </li>
+                <li>
+                  <span className="tick">REPAIRS</span>
+                  <span>
+                    Concrete moves — add a node of this size, drop to a smaller quant, cap context at this value
+                    — each one recomputed against your rig.
+                  </span>
+                </li>
+              </ul>
+              <div className="hero-ctas" style={{ marginTop: "24px" }}>
+                <a className="btn primary" href="/app.html?preset=dual-3090">
+                  Try the 2×3090 break →
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="band" id="how">
           <div className="wrap">
             <div className="section-head reveal">
+              <div className="eyebrow">How it works</div>
               <h2>Three steps to a rig you trust</h2>
               <p>No sign-up, no GPU quota, no cloud bill to find out the answer.</p>
             </div>
@@ -403,97 +537,143 @@ export function Landing() {
           </div>
         </section>
 
-        <section className="section" id="deploy">
+        <section className="band" id="deploy">
           <div className="wrap">
             <div className="section-head reveal">
-              <h2>The deploy kit: from simulation to real infrastructure</h2>
+              <div className="eyebrow">Deploy kit</div>
+              <h2>From simulation to real infrastructure</h2>
               <p>
                 The same rig you simulated becomes a CloudFormation stack — VPC, security group, GPU nodes with
-                llama.cpp served over an OpenAI-compatible endpoint. Connect your AWS account with a scoped,
-                revocable role; no keys ever change hands.
+                llama.cpp served over an OpenAI-compatible endpoint. In your account, with your permissions.
               </p>
             </div>
             <div className="deploy-grid">
               <div className="reveal">
-                <ul className="checklist">
+                <ol className="flow">
                   <li>
+                    <span className="n">1</span>
                     <span>
-                      <strong>Scoped trust, not credentials.</strong> A connect stack in your account creates a
-                      role Clusterbreak assumes via STS with a per-user ExternalId. Delete the stack to revoke.
+                      <b>Connect your account</b>
+                      <span>
+                        One click launches a connect stack in your AWS console — it creates a role scoped to{" "}
+                        <code>clusterbreak-*</code> that trusts the Clusterbreak backend plus a per-user ExternalId.
+                      </span>
                     </span>
                   </li>
                   <li>
+                    <span className="n">2</span>
                     <span>
-                      <strong>Least privilege.</strong> The deploy role can only touch <code>clusterbreak-*</code>{" "}
-                      stacks; node permissions live in a separate execution role.
+                      <b>Paste the role ARN</b>
+                      <span>
+                        Clusterbreak assumes it via STS — no access keys are ever created, sent, or stored.
+                        Deleting the stack revokes access instantly.
+                      </span>
                     </span>
                   </li>
                   <li>
+                    <span className="n">3</span>
                     <span>
-                      <strong>Auto-teardown by default.</strong> Every rig self-destructs after a set window
-                      (6h default) — an EventBridge sweep deletes expired stacks. No runaway bills.
+                      <b>Provision the rig</b>
+                      <span>
+                        Pick a key pair, your SSH CIDR, on-demand or spot, and an auto-teardown window. The stack
+                        deploys the exact devices you simulated.
+                      </span>
                     </span>
                   </li>
                   <li>
+                    <span className="n">4</span>
                     <span>
-                      <strong>Real prices, timestamped.</strong> Costs come from the AWS Pricing API, refreshed by
-                      a script and shown with their fetch date.
+                      <b>Watch it come up</b>
+                      <span>
+                        Live stack status, then the endpoint: an OpenAI-compatible llama.cpp server you can hit
+                        immediately.
+                      </span>
                     </span>
                   </li>
-                </ul>
+                  <li>
+                    <span className="n">5</span>
+                    <span>
+                      <b>It tears itself down</b>
+                      <span>
+                        An EventBridge sweep deletes expired stacks server-side — even if you close the tab. The
+                        6-hour default exists because we once left a g5 running overnight; the product must not
+                        let that happen to you.
+                      </span>
+                    </span>
+                  </li>
+                </ol>
+                <div className="security-note">
+                  <b>SECURITY MODEL</b>
+                  Clusterbreak never sees or stores your AWS keys. The connect stack is ~120 lines of IAM you can
+                  audit before deploying, the deploy role can only touch <code>clusterbreak-*</code> stacks, and
+                  node permissions live in a separate execution role. Full walkthrough in{" "}
+                  <a href="/docs.html#connect">the docs</a>.
+                </div>
               </div>
               <div className="reveal">
-                <table className="price-table" aria-label={`AWS GPU instance prices, ap-south-1, fetched ${pricingDate}`}>
-                  <thead>
-                    <tr>
-                      <th scope="col">Instance</th>
-                      <th scope="col">On-demand</th>
-                      <th scope="col">Spot</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>g4dn.xlarge</td>
-                      <td>${g4dn?.onDemandUsdPerHour?.toFixed(2) ?? "—"}/hr</td>
-                      <td className="dim">${g4dn?.spotUsdPerHour?.toFixed(2) ?? "—"}/hr</td>
-                    </tr>
-                    <tr>
-                      <td>g5.xlarge</td>
-                      <td>${g5?.onDemandUsdPerHour?.toFixed(2) ?? "—"}/hr</td>
-                      <td className="dim">${g5?.spotUsdPerHour?.toFixed(2) ?? "—"}/hr</td>
-                    </tr>
-                    <tr>
-                      <td>g6.xlarge</td>
-                      <td>${g6?.onDemandUsdPerHour?.toFixed(2) ?? "—"}/hr</td>
-                      <td className="dim">${g6?.spotUsdPerHour?.toFixed(2) ?? "—"}/hr</td>
-                    </tr>
-                    <tr>
-                      <td>g6e.xlarge</td>
-                      <td>${g6e?.onDemandUsdPerHour?.toFixed(2) ?? "—"}/hr</td>
-                      <td className="dim">${g6e?.spotUsdPerHour?.toFixed(2) ?? "—"}/hr</td>
-                    </tr>
-                  </tbody>
-                </table>
-                <p style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--dim-2)", marginTop: "var(--s3)" }}>
-                  ap-south-1 · fetched {pricingDate} from the AWS Pricing API. Spot moves constantly.
+                <div className="table-wrap">
+                  <table
+                    className="price-table"
+                    aria-label={`AWS GPU instance prices, ap-south-1, fetched ${pricingDate}`}
+                  >
+                    <thead>
+                      <tr>
+                        <th scope="col">Instance</th>
+                        <th scope="col">On-demand</th>
+                        <th scope="col">Spot</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(["g4dn.xlarge", "g5.xlarge", "g6.xlarge", "g6e.xlarge"] as const).map((t) => (
+                        <tr key={t}>
+                          <td>
+                            {t}
+                            {t.startsWith("g6") ? <span className="gpu-tag">newest</span> : null}
+                          </td>
+                          <td>
+                            <b>${PRICES[t]?.onDemandUsdPerHour?.toFixed(2) ?? "—"}/hr</b>
+                          </td>
+                          <td>${PRICES[t]?.spotUsdPerHour?.toFixed(2) ?? "—"}/hr</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="meta" style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--dim-2)" }}>
+                  ap-south-1 · fetched {pricingDate} from the AWS Pricing API. Spot moves constantly; the app
+                  shows its fetch date wherever cost appears.
                 </p>
+                <div className="hero-ctas" style={{ marginTop: "20px" }}>
+                  <a className="btn" href="/docs.html#connect">
+                    Read the connect guide
+                  </a>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="section">
+        <section className="band">
           <div className="wrap">
-            <div className="docs-teaser reveal">
-              <div>
-                <h3>Documentation</h3>
-                <p>
-                  The simulator, the break-it physics, verdict cards, share links, the AWS deploy kit, and the
-                  full data-accuracy model — every claim with its source.
-                </p>
-              </div>
-              <a className="btn" href="/docs.html">
-                Read the docs →
+            <div className="section-head reveal">
+              <div className="eyebrow">Documentation</div>
+              <h2>Every claim, with its source</h2>
+            </div>
+            <div className="docs-teaser">
+              <a className="reveal" href="/docs.html#simulator">
+                <span className="k">THE SIMULATOR</span>
+                <h3>How runs actually work</h3>
+                <p>Pipeline stages, per-hop link costs, KV growth, and the death conditions the engine checks.</p>
+              </a>
+              <a className="reveal" href="/docs.html#data">
+                <span className="k">DATA ACCURACY</span>
+                <h3>Where every number comes from</h3>
+                <p>HF blob sizes, fitted efficiencies, published anchors — and what “unverified” means here.</p>
+              </a>
+              <a className="reveal" href="/docs.html#connect">
+                <span className="k">AWS CONNECT</span>
+                <h3>Use it on your own account</h3>
+                <p>The connect stack, the ExternalId handshake, least-privilege roles, and auto-teardown.</p>
               </a>
             </div>
           </div>

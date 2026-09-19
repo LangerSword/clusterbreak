@@ -116,7 +116,7 @@ export function NodeMesh({
         <meshBasicMaterial color={ringColor} transparent opacity={dragging ? 1 : 0.75} />
       </mesh>
       <Html center position={[0, 0.62, 0]} zIndexRange={[20, 0]} wrapperClass="node-html">
-        <div className={`node-label ${FIT_CLASS[estimate.fit]} ${unplugged ? "unplugged" : ""}`}>
+        <div className={`node-label ${FIT_CLASS[estimate.fit]} ${unplugged ? "unplugged" : ""}`} data-vendor={device.vendor}>
           <div className="nl-name">{device.name}</div>
           {unplugged ? (
             <div className="nl-tps">UNPLUGGED</div>

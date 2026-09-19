@@ -121,6 +121,16 @@ export interface TemplateArgs {
   rigLabel: string;
 }
 
+/** GPU mode for a plan: true only when every node is a GPU instance class. */
+export function gpuModeFor(plan: DeployPlan): "gpu" | "cpu" {
+  return plan.entries.length > 0 &&
+    plan.entries.every(
+      (n) => n.instanceType.startsWith("g4dn") || n.instanceType.startsWith("g5") || n.instanceType.startsWith("g6e"),
+    )
+    ? "gpu"
+    : "cpu";
+}
+
 /**
  * Build the template. Bash in userdata uses only unbraced `$var` shell
  * variables so CloudFormation `!Sub` (which substitutes `${...}`) can inject
@@ -267,7 +277,7 @@ Parameters:
     Description: spot can be reclaimed by AWS at any time (cheaper).
   GpuMode:
     Type: String
-    Default: ${nodes.length > 0 && nodes.every((n) => n.instanceType.startsWith("g4dn") || n.instanceType.startsWith("g5") || n.instanceType.startsWith("g6e")) ? "gpu" : "cpu"}
+    Default: ${gpuModeFor(a.plan)}
     AllowedValues: [gpu, cpu]
     Description: gpu requires an approved G-instance quota in this account/region.
   ModelUrl:

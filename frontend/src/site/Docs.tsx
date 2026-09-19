@@ -67,7 +67,9 @@ export function Docs() {
       <nav className="nav scrolled" aria-label="Main">
         <div className="nav-inner">
           <a className="nav-brand" href="/">
-            <span className="dot" aria-hidden="true" />
+            <span className="nav-mark" aria-hidden="true">
+              ⌁
+            </span>
             clusterbreak
           </a>
           <div className="nav-links">
@@ -77,7 +79,9 @@ export function Docs() {
             <a href="https://github.com/LangerSword/clusterbreak" target="_blank" rel="noreferrer">
               GitHub
             </a>
-            <a className="nav-cta" href="/app.html">
+          </div>
+          <div className="nav-cta">
+            <a className="btn primary sm" href="/app.html">
               Open the simulator
             </a>
           </div>
@@ -266,40 +270,80 @@ export function Docs() {
           <section id="connect">
             <h2>Connect your account</h2>
             <p>
-              Instead of downloading and deploying by hand, you can let Clusterbreak drive: deploy the{" "}
-              <strong>connect stack</strong> in your account once. It creates:
+              The simulator's <strong>AWS ACCOUNT</strong> panel (inspector, below the deploy kit) drives the
+              whole thing. Connect once, then provision any rig you've simulated. Here is exactly what happens:
             </p>
-            <ul>
+            <ol>
               <li>
-                <strong>ClusterbreakDeployRole</strong> — assumable only by the Clusterbreak backend role, only
-                with your per-user <code>ExternalId</code>, and limited to CloudFormation actions on{" "}
-                <code>clusterbreak-*</code> stacks.
+                <strong>Generate an ExternalId.</strong> The panel makes a fresh <code>cb-…</code> secret for you
+                and keeps it in your browser session. It is the only thing that makes your role assumable — and
+                only by Clusterbreak's backend.
               </li>
               <li>
-                <strong>ClusterbreakStackRole</strong> — the execution role CloudFormation uses to create the
-                rig's VPC and instances.
+                <strong>Deploy the connect stack.</strong>{" "}
+                <code>LAUNCH STACK IN AWS CONSOLE ↗</code> opens CloudFormation quick-create with the template
+                URL and both parameters already filled in. You review it and click create. It builds:
+                <ul>
+                  <li>
+                    <strong>ClusterbreakDeployRole</strong> — assumable only by the Clusterbreak backend role
+                    (<code>arn:aws:iam::703651068111:role/clusterbreak-lambda-role</code>), only with your{" "}
+                    <code>ExternalId</code>, and limited to CloudFormation actions on{" "}
+                    <code>clusterbreak-*</code> stacks.
+                  </li>
+                  <li>
+                    <strong>ClusterbreakStackRole</strong> — the execution role CloudFormation uses to create the
+                    rig's VPC and instances. It never needs to be assumed by Clusterbreak itself.
+                  </li>
+                </ul>
+                Prefer to read it first? <code>download .yaml</code> gives you the same ~120 lines to audit, or
+                deploy it yourself with <code>aws cloudformation deploy</code>.
               </li>
-            </ul>
-            <p>
-              Clusterbreak never sees your access keys. It holds your role ARN and ExternalId, assumes the role
-              with STS when you ask it to provision, and that's the entire relationship. To revoke everything:
-              delete the connect stack.
-            </p>
+              <li>
+                <strong>Paste the role ARN.</strong> Copy the <code>DeployRoleArn</code> output back into the
+                panel and hit connect. Clusterbreak calls STS <code>AssumeRole</code> with your ExternalId — if
+                either is wrong, the call fails and nothing is stored. On success you get a session showing your
+                account id, the region, and your GPU vCPU quota.
+              </li>
+            </ol>
+            <div className="callout ok">
+              <b>What Clusterbreak never has</b>
+              Your access keys, your secret keys, or any long-lived credential. It stores the role ARN and
+              ExternalId you pasted, and assumes the role on demand for the actions you trigger. To revoke
+              everything: delete the connect stack in your account. There is no other switch, and no hidden one.
+            </div>
           </section>
 
           <section id="provision">
-            <h2>Provision & teardown</h2>
+            <h2>Provision &amp; teardown</h2>
             <p>
-              Provisioning runs CloudFormation in your account via the assumed role. Stack creation takes a few
-              minutes; the node then bootstraps (driver install may need one reboot — the systemd unit handles
-              it and starts llama.cpp on boot). Outputs include per-node endpoints and the teardown command.
+              With a session open, the panel's <strong>provision</strong> step takes the same CloudFormation
+              template the download button produces and creates it in <em>your</em> account through the assumed
+              role. You choose the key pair, your SSH CIDR, on-demand or spot, and the auto-teardown window.
+              Stack creation takes a few minutes; the node bootstraps itself (driver install may take one reboot
+              — a systemd unit waits for the GPU and starts llama.cpp on boot), then the panel shows the live
+              stack status and the outputs, including an OpenAI-compatible endpoint you can open directly.
             </p>
+            <div className="callout warn">
+              <b>Quota is yours to fix</b>
+              G-instance quota starts at 0 vCPUs on new accounts. If the panel reports{" "}
+              <code>gpu quota: 0 vCPU</code>, request an increase in Service Quotas → EC2 → “All G and VT
+              Instance Requests” (a few hours, usually approved). CPU-only rigs need no quota.
+            </div>
             <p>
               <strong>Auto-teardown is on by default (6 hours).</strong> An EventBridge sweep runs every 15
-              minutes and deletes expired stacks through the same assumed role. You can also tear down manually
-              at any time — <code>aws cloudformation delete-stack</code>, or the API's{" "}
-              <code>/aws/teardown</code>.
+              minutes and deletes expired stacks through the same assumed role — server-side, so it works even
+              if you close the tab. You can also tear down manually from the panel's{" "}
+              <code>tear down now</code>, or with <code>aws cloudformation delete-stack</code>. This default
+              exists because we left a g5.xlarge running overnight during development and paid for it; the
+              product should not let that happen to you.
             </p>
+            <div className="callout">
+              <b>Using the demo account instead</b>
+              If you are evaluating Clusterbreak and don't want to connect your own account yet, the manual path
+              still works end-to-end: <code>DOWNLOAD CLOUDFORMATION TEMPLATE</code>, then{" "}
+              <code>aws cloudformation deploy</code> in whichever account you like. The template is the product;
+              the connect flow is just the convenience layer on top of it.
+            </div>
           </section>
 
           <section id="data">

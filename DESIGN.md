@@ -54,6 +54,11 @@ Brand-continuous with the app (one product, one palette). Dark-only.
 | `--dim` | `#98a0aa` | secondary text |
 | `--dim-2` | `#7a838d` | tertiary/labels (amended from `#5e6670` — see §8) |
 | `--accent` | `#9fd0ff` | CTAs, links, key numbers — **budget ≤10%** |
+| `--cyan` | `#67e8f9` | gradient start (§9) |
+| `--violet` | `#a78bfa` | gradient end (§9) |
+| `--nv` | `#76b900` | NVIDIA — vendor colour, means silicon (§9) |
+| `--apple` | `#c3ccd8` | Apple — vendor colour (§9) |
+| `--amd` | `#f2545b` | AMD — vendor colour (§9) |
 | `--ok` | `#57d38c` | measured/verified state |
 | `--warn` | `#e0b341` | tight/unverified state |
 | `--bad` | `#e05c5c` | does-not-fit / fault state |
@@ -152,3 +157,30 @@ Accepted debt (each with reason):
 - **`--dim-2` amended** from `#5e6670` to `#7a838d` after the first visual-QA
   pass measured 3.35:1 at 11–13px (below the §2 AA floor); the new value is
   5.06:1 on `--bg`. Contract and code updated together.
+
+## 9. Site v2 — dynamic + colour (amendment, same day)
+
+The first pass was disciplined but static; this amendment adds motion and a
+real colour system **without** breaking §2's discipline. The rule that keeps
+it honest: **colour encodes meaning, never decoration.**
+
+- **Vendor colours** (hardware identity, used on chips, cards, marquee):
+  `--nv` `#76b900` (NVIDIA), `--apple` `#c3ccd8`, `--amd` `#f2545b`,
+  `--generic` `#8b95a3`.
+- **Interaction gradient**: `--grad` `linear-gradient(135deg,#67e8f9,#7dd3fc 45%,#a78bfa)`
+  on primary CTAs, key numbers, active states. Accent budget (§2) still
+  ≤10% of surface — the gradient *is* the accent, not an addition to it.
+- **New tokens**: `--cyan` `#67e8f9`, `--violet` `#a78bfa`, `--panel-3` `#171d26`.
+- **Motion (all reduced-motion aware)**: aurora drift behind the hero (≤20s
+  loop, opacity-only), scroll reveal (opacity + 10px rise, once, IO-based),
+  count-up on stat numbers (skipped when reduced-motion), marquee of device
+  chips (pauses on hover/focus), hover lift + glow on bento cards. No scroll
+  hijacking; nothing animates layout.
+- **New components**: `.marquee` (device strip), `.bento` (asymmetric feature
+  grid with per-card accent), `.aurora` (hero backdrop), `.reveal`
+  (intersection-observed wrapper), `.chip-vendor`.
+- The app shell (`frontend/src/index.css`) carries the same direction so
+  site → simulator feels like one product.
+- Unchanged: every number on the page is still computed from the shipped data
+  files or the real engine — motion never fabricates state, and the postmortem
+  shown on the landing is a real captured run, labelled as a capture.

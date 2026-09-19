@@ -10,6 +10,7 @@ import {
 } from "../sim";
 import type { NodeEstimate } from "../rig/NodeMesh";
 import type { DeployPlan } from "../deploy/cfn";
+import { AwsConnect } from "./AwsConnect";
 
 export interface SelectedInfo {
   id: string;
@@ -38,6 +39,12 @@ interface Props {
   pricingFetchedAt: string;
   pricingRegion: string;
   onDownloadTemplate: () => void;
+  /** CFN template for the current rig + verified model URL, for the connect flow. */
+  awsTemplate: string | null;
+  awsPlanSummary: string;
+  awsModelUrl: string | null;
+  awsDefaultStackName: string;
+  awsGpuMode: "gpu" | "cpu";
   onRemoveNode: (id: string) => void;
   onUnlink: (id: string) => void;
   onLinkGbps: (id: string, gbps: number) => void;
@@ -64,6 +71,11 @@ export function Inspector({
   pricingFetchedAt,
   pricingRegion,
   onDownloadTemplate,
+  awsTemplate,
+  awsPlanSummary,
+  awsModelUrl,
+  awsDefaultStackName,
+  awsGpuMode,
   onRemoveNode,
   onUnlink,
   onLinkGbps,
@@ -254,14 +266,24 @@ export function Inspector({
                 DOWNLOAD CLOUDFORMATION TEMPLATE
               </button>
               <p className="note">
-                then run: aws cloudformation deploy --template-file &lt;file&gt; --stack-name
+                manual: <code>aws cloudformation deploy --template-file &lt;file&gt; --stack-name
                 clusterbreak-rig --parameter-overrides KeyName=&lt;your-key&gt;
-                SshCidr=$(curl -s ifconfig.me)/32
+                SshCidr=$(curl -s ifconfig.me)/32</code> — or connect your account below and let
+                Clusterbreak deploy it for you.
               </p>
             </>
           )}
         </section>
       )}
+
+      <AwsConnect
+        template={awsTemplate}
+        planSummary={awsPlanSummary}
+        modelUrl={awsModelUrl}
+        contextTokens={contextTokens}
+        defaultStackName={awsDefaultStackName}
+        gpuMode={awsGpuMode}
+      />
     </aside>
   );
 }

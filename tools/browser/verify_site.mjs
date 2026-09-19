@@ -1,7 +1,7 @@
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 
-const base = process.argv[2] ?? "https://d1at2woaiwy2hz.cloudfront.net";
+const base = process.argv[2] ?? "https://clusterbreak.langersword.in";
 const CHROME =
   process.env.CHROME_PATH ??
   "/home/lakshaya/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome";
@@ -38,8 +38,8 @@ let errors = await visit("/", { width: 1440, height: 900 }, "landing-1440", {
     // hero instrument must compute real engine values
     const tps = await page.locator(".readout-num").innerText();
     check("landing: instrument computes (rtx3090 + llama-8b)", parseFloat(tps) > 50 && parseFloat(tps) < 200, `${tps} tok/s`);
-    const fit = await page.locator(".readout-row .chip").innerText();
-    check("landing: fit chip present", fit.length > 3, fit);
+    const fit = await page.locator(".readout-row b").first().innerText();
+    check("landing: fit verdict present", /fits|tight|does not fit/i.test(fit), fit);
     // switch device → value must change (engine, not static)
     await page.selectOption("#hero-device", { label: "Apple M2 Ultra 192GB" });
     await page.waitForTimeout(700);
@@ -49,8 +49,14 @@ let errors = await visit("/", { width: 1440, height: 900 }, "landing-1440", {
     const stats = await page.locator(".stat-num").allInnerTexts();
     check("landing: real stats rendered", stats.length >= 3 && stats.includes("15"), stats.join(" / "));
     // nav links
-    for (const [label, path] of [["Docs", "/docs.html"], ["Open the simulator", "/app.html"]]) {
-      const href = await page.locator(`.nav-links a:has-text("${label}")`).getAttribute("href");
+    for (const [label, path] of [
+      ["Docs", "/docs.html"],
+      ["Open the simulator", "/app.html"],
+    ]) {
+      const href = await page
+        .locator(`.nav-links a:has-text("${label}"), .nav-cta a:has-text("${label}")`)
+        .first()
+        .getAttribute("href");
       check(`landing: nav ${label} → ${path}`, href === path, href);
     }
     // pricing table has real numbers

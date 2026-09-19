@@ -1,6 +1,6 @@
 # Site grade — Clusterbreak (deterministic grader)
 
-*Run: 2026-09-19 19:32 UTC · grader: `tools/grade_site.py` · target: deployed site.*
+*Run: 2026-09-19 20:19 UTC · grader: `tools/grade_site.py` · target: deployed site.*
 
 | | |
 |---|---|

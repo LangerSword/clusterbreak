@@ -128,6 +128,7 @@ export function Palette({
             <div key={d.id} className="custom-row">
               <button
                 className="device-card"
+                data-vendor={d.vendor}
                 onClick={() => onAddDevice(d.id)}
                 title={d.efficiencyBasis ?? "custom device"}
               >
@@ -154,7 +155,13 @@ export function Palette({
           <section key={vendor}>
             <h3>{vendor.toUpperCase()}</h3>
             {list.map((d) => (
-              <button key={d.id} className="device-card" onClick={() => onAddDevice(d.id)} title={d.source}>
+              <button
+                key={d.id}
+                className="device-card"
+                data-vendor={d.vendor}
+                onClick={() => onAddDevice(d.id)}
+                title={d.source}
+              >
                 <span className="dc-name">{d.name}</span>
                 <span className="dc-spec">
                   {d.memoryGb}GB · {d.bandwidthGbps} GB/s

@@ -35,6 +35,8 @@ import { buildReportPayload } from "./report";
 import {
   buildTemplate,
   estimateCost,
+  gpuModeFor,
+  modelUrl,
   planDeploy,
   PRICING_FETCHED_AT,
   PRICING_REGION,
@@ -385,6 +387,27 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  // Same template the download produces — handed to the secure connect flow.
+  const awsTemplate = useMemo(() => {
+    if (!deploy || deploy.plan.entries.length === 0) return null;
+    return buildTemplate({
+      plan: deploy.plan,
+      model,
+      quant,
+      contextTokens,
+      rigLabel: lastPreset ?? "custom-rig",
+    });
+  }, [deploy, model, quant, contextTokens, lastPreset]);
+
+  const awsPlanSummary = useMemo(() => {
+    if (!deploy || deploy.plan.entries.length === 0) return "";
+    const counts = new Map<string, number>();
+    for (const e of deploy.plan.entries) counts.set(e.instanceType, (counts.get(e.instanceType) ?? 0) + 1);
+    return [...counts.entries()].map(([t, n]) => `${n} × ${t}`).join(" + ");
+  }, [deploy]);
+
+  const awsModelUrl = useMemo(() => modelUrl(model, quant)?.url ?? null, [model, quant]);
+
   const loadPreset = (p: Preset) => {
     run.stop();
     rig.dispatch({ type: "load", nodes: p.nodes, links: p.links });
@@ -480,6 +503,11 @@ export default function App() {
           pricingFetchedAt={PRICING_FETCHED_AT}
           pricingRegion={PRICING_REGION}
           onDownloadTemplate={downloadTemplate}
+          awsTemplate={awsTemplate}
+          awsPlanSummary={awsPlanSummary}
+          awsModelUrl={awsModelUrl}
+          awsDefaultStackName={`clusterbreak-${(lastPreset ?? "custom-rig").slice(0, 24)}`}
+          awsGpuMode={deploy && deploy.plan.entries.length > 0 ? gpuModeFor(deploy.plan) : "cpu"}
           onRemoveNode={(id) => {
             rig.dispatch({ type: "remove", id });
             setSelectedId(null);
