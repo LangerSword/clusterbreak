@@ -24,7 +24,7 @@ import time
 import boto3
 
 SERVICE = "clusterbreak-api"
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 TABLE_NAME = os.environ.get("RUNS_TABLE", "clusterbreak-runs")
 SESSIONS_TABLE_NAME = os.environ.get("SESSIONS_TABLE", "clusterbreak-sessions")
 REGION = os.environ.get("AWS_REGION", "ap-south-1")
@@ -214,6 +214,37 @@ def _load_session(body):
     return item, None
 
 
+def _sweep():
+    """Auto-teardown sweep: delete stacks whose sessions have expired.
+
+    Runs on an EventBridge schedule. This exists because we left a g5.xlarge
+    running for 23 hours during development — the product must never let that
+    happen to anyone: every provisioned rig self-destructs by default."""
+    now = int(time.time())
+    try:
+        items = _get_sessions().scan().get("Items", [])
+    except Exception as e:
+        print(f"sweep scan failed: {e!r}", flush=True)
+        return {"ok": False, "swept": 0}
+    swept = 0
+    for item in items:
+        teardown_at = item.get("teardownAt")
+        stack = item.get("stackName")
+        if teardown_at is None or int(teardown_at) > now:
+            continue
+        if not (isinstance(stack, str) and STACK_RE.match(stack)):
+            continue
+        try:
+            session = _assume(item["roleArn"], item["externalId"])
+            session.client("cloudformation", region_name=REGION).delete_stack(StackName=stack)
+            _get_sessions().delete_item(Key={"id": item["id"]})
+            swept += 1
+            print(f"auto-teardown: deleted {stack} (session {item['id']})", flush=True)
+        except Exception as e:
+            print(f"auto-teardown failed for {stack}: {e!r}", flush=True)
+    return {"ok": True, "swept": swept}
+
+
 def _post_connect(event):
     """Verify a user's connect stack by assuming its role, then mint a session id.
     The ExternalId + trust policy are enforced by STS; we only ever hold the
@@ -293,6 +324,10 @@ def _post_provision(event):
     ]
     if isinstance(body.get("modelUrl"), str) and body["modelUrl"].startswith("https://"):
         params.append({"ParameterKey": "ModelUrl", "ParameterValue": body["modelUrl"][:500]})
+    teardown_hours = body.get("autoTeardownHours", 6)
+    if not (isinstance(teardown_hours, (int, float)) and 0 <= teardown_hours <= 168):
+        return _response(400, {"ok": False, "error": "invalid_auto_teardown",
+                               "detail": "hours, 0 = never, max 168"})
     try:
         session = _assume(item["roleArn"], item["externalId"])
         cfn = session.client("cloudformation", region_name=REGION)
@@ -310,8 +345,21 @@ def _post_provision(event):
             return _response(409, {"ok": False, "error": "stack_exists"})
         print(f"provision failed: {e!r}", flush=True)
         return _response(502, {"ok": False, "error": "provision_failed", "detail": detail})
+    if teardown_hours > 0:
+        try:
+            _get_sessions().update_item(
+                Key={"id": item["id"]},
+                UpdateExpression="SET stackName = :s, teardownAt = :t",
+                ExpressionAttributeValues={
+                    ":s": stack_name,
+                    ":t": int(time.time() + teardown_hours * 3600),
+                },
+            )
+        except Exception as e:
+            print(f"teardown schedule failed: {e!r}", flush=True)
     return _response(202, {"ok": True, "stackId": res["StackId"], "stackName": stack_name,
-                           "accountId": item["accountId"]})
+                           "accountId": item["accountId"],
+                           "autoTeardownHours": teardown_hours or None})
 
 
 def _get_status(session_id, stack_name):
@@ -397,5 +445,7 @@ def route(method, path, event):
 
 
 def handler(event, context):  # noqa: ARG001 — context intentionally unused
+    if event.get("source") == "aws.events":
+        return _sweep()
     http = event.get("requestContext", {}).get("http", {})
     return route(http.get("method", "GET"), http.get("path", "/"), event)
