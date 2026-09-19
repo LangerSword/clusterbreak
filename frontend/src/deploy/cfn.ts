@@ -152,9 +152,8 @@ export function buildTemplate(a: TemplateArgs): string {
           Fn::Base64: !Sub |
             #!/bin/bash
             set -euxo pipefail
-            MODEL_URL="\${ModelUrl}"
-            GPU_MODE="\${GpuMode}"
             export DEBIAN_FRONTEND=noninteractive
+            MODEL_URL="\${ModelUrl}"
             apt-get update -y
             apt-get install -y docker.io curl ca-certificates
             systemctl enable --now docker
@@ -162,20 +161,66 @@ export function buildTemplate(a: TemplateArgs): string {
             cd /opt/clusterbreak
             MODEL_FILE="$(basename "$MODEL_URL")"
             curl -L --retry 5 -C - -o "models/$MODEL_FILE" "$MODEL_URL"
+
+            cat > /opt/clusterbreak/start-llama.sh <<'SCRIPT'
+            #!/bin/bash
+            set -eux
             if [ "$GPU_MODE" = "gpu" ]; then
+              IMAGE=ghcr.io/ggml-org/llama.cpp:server-cuda
+              GPU_FLAG="--gpus all"
+            else
+              IMAGE=ghcr.io/ggml-org/llama.cpp:server
+              GPU_FLAG=""
+            fi
+            MODEL_FILE="$(basename "$MODEL_URL")"
+            docker rm -f llama 2>/dev/null || true
+            docker run -d --name llama --restart unless-stopped $GPU_FLAG -p 8080:8080 -v /opt/clusterbreak/models:/models "$IMAGE" -m "/models/$MODEL_FILE" --host 0.0.0.0 --port 8080 -c "$CTX"
+            SCRIPT
+            chmod +x /opt/clusterbreak/start-llama.sh
+
+            cat > /etc/systemd/system/clusterbreak-llama.service <<'UNIT'
+            [Unit]
+            Description=Clusterbreak llama.cpp server
+            After=docker.service network-online.target
+            Wants=network-online.target docker.service
+
+            [Service]
+            Type=oneshot
+            RemainAfterExit=yes
+            Environment=GPU_MODE=\${GpuMode}
+            Environment=CTX=\${ContextTokens}
+            Environment=MODEL_URL=\${ModelUrl}
+            ExecStartPre=/bin/bash -c 'if [ "$GPU_MODE" = "gpu" ]; then for i in $(seq 1 90); do nvidia-smi -L >/dev/null 2>&1 && exit 0; sleep 5; done; exit 1; fi'
+            ExecStart=/bin/bash /opt/clusterbreak/start-llama.sh
+
+            [Install]
+            WantedBy=multi-user.target
+            UNIT
+
+            NEED_REBOOT=0
+            if [ "\${GpuMode}" = "gpu" ]; then
+              echo "blacklist nouveau" > /etc/modprobe.d/blacklist-nouveau.conf
+              echo "options nouveau modeset=0" >> /etc/modprobe.d/blacklist-nouveau.conf
+              update-initramfs -u
               apt-get install -y ubuntu-drivers-common
-              ubuntu-drivers install --gpgpu || true
+              if ! ubuntu-drivers install --gpgpu; then ubuntu-drivers install; fi
               curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
               curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' > /etc/apt/sources.list.d/nvidia-container-toolkit.list
               apt-get update -y
               apt-get install -y nvidia-container-toolkit
               nvidia-ctk runtime configure --runtime=docker
               systemctl restart docker
-              IMAGE=ghcr.io/ggml-org/llama.cpp:server-cuda
-            else
-              IMAGE=ghcr.io/ggml-org/llama.cpp:server
+              if ! nvidia-smi -L >/dev/null 2>&1; then NEED_REBOOT=1; fi
             fi
-            docker run -d --name llama --restart unless-stopped --gpus all -p 8080:8080 -v /opt/clusterbreak/models:/models "$IMAGE" -m "/models/$MODEL_FILE" --host 0.0.0.0 --port 8080 -c \${ContextTokens}
+
+            systemctl daemon-reload
+            systemctl enable clusterbreak-llama.service
+            if [ "$NEED_REBOOT" = "1" ]; then
+              echo "nvidia driver installed but not yet active - rebooting; the systemd unit starts llama.cpp on boot"
+              reboot
+            else
+              systemctl start clusterbreak-llama.service
+            fi
 
   Node${i + 1}:
     Type: AWS::EC2::Instance

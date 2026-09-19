@@ -64,9 +64,14 @@ describe("deploy kit", () => {
     expect(imoIdx).toBeGreaterThan(ltIdx);
     expect(nodeIdx).toBeGreaterThan(imoIdx);
     expect(yaml).toContain("llama.cpp:server-cuda");
-    expect(yaml).toContain("-c ${ContextTokens}");
+    expect(yaml).toContain('docker run -d --name llama');
+    expect(yaml).toContain('Environment=CTX=${ContextTokens}');
     expect(yaml).toContain("Default: 4096");
     expect(yaml).toContain('MODEL_URL="${ModelUrl}"');
+    // GPU bootstrap must handle the nouveau→nvidia transition with a reboot
+    expect(yaml).toContain("blacklist nouveau");
+    expect(yaml).toContain("clusterbreak-llama.service");
+    expect(yaml).toContain("nvidia-smi -L");
     expect(yaml).toContain("Node2Endpoint");
     expect(yaml).toContain("delete-stack");
     expect(yaml).toMatch(/resolve\/main\/.+\.gguf/);

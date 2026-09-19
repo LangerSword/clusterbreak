@@ -24,16 +24,26 @@ import time
 import boto3
 
 SERVICE = "clusterbreak-api"
-VERSION = "0.2.1"
+VERSION = "0.3.0"
 TABLE_NAME = os.environ.get("RUNS_TABLE", "clusterbreak-runs")
+SESSIONS_TABLE_NAME = os.environ.get("SESSIONS_TABLE", "clusterbreak-sessions")
+REGION = os.environ.get("AWS_REGION", "ap-south-1")
 MAX_BODY_BYTES = 8192
+MAX_TEMPLATE_CHARS = 60000
 ID_LEN = 10
 ID_ALPHABET = string.ascii_lowercase + string.digits
 ID_RE = re.compile(r"^[a-z0-9]{6,16}$")
+SESSION_RE = re.compile(r"^[a-z0-9]{16}$")
+STACK_RE = re.compile(r"^clusterbreak-[a-z0-9-]{3,40}$")
+ROLE_ARN_RE = re.compile(r"^arn:aws:iam::\d{12}:role/ClusterbreakDeployRole$")
+EXTERNAL_ID_RE = re.compile(r"^[A-Za-z0-9+/=_-]{16,64}$")
+EXEC_ROLE_NAME = "ClusterbreakStackRole"
 TTL_DAYS = 90
+SESSION_TTL_HOURS = 24
 QUANTS = {"q4_k_m", "q8_0", "bf16"}
 
 _table_cache = None
+_sessions_cache = None
 
 
 def _get_table():
@@ -42,6 +52,33 @@ def _get_table():
         region = os.environ.get("AWS_REGION", "ap-south-1")
         _table_cache = boto3.resource("dynamodb", region_name=region).Table(TABLE_NAME)
     return _table_cache
+
+
+def _get_sessions():
+    global _sessions_cache
+    if _sessions_cache is None:
+        _sessions_cache = boto3.resource("dynamodb", region_name=REGION).Table(SESSIONS_TABLE_NAME)
+    return _sessions_cache
+
+
+def _assume(role_arn, external_id):
+    """Assume the user's connect role. STS itself enforces the trust policy
+    (our exact backend role + the ExternalId) — nothing else can succeed."""
+    sts = boto3.client("sts", region_name=REGION)
+    creds = sts.assume_role(
+        RoleArn=role_arn, RoleSessionName="clusterbreak-api", ExternalId=external_id
+    )["Credentials"]
+    return boto3.session.Session(
+        aws_access_key_id=creds["AccessKeyId"],
+        aws_secret_access_key=creds["SecretAccessKey"],
+        aws_session_token=creds["SessionToken"],
+        region_name=REGION,
+    )
+
+
+def _session_from(session_id):
+    res = _get_sessions().get_item(Key={"id": session_id})
+    return res.get("Item")
 
 
 def _json_default(o):
@@ -167,6 +204,165 @@ def _get_run(run_id):
     return _response(200, {"ok": True, "id": run_id, "createdAt": item.get("createdAt"), "report": item.get("report")})
 
 
+def _load_session(body):
+    sid = (body or {}).get("sessionId", "")
+    if not (isinstance(sid, str) and SESSION_RE.match(sid)):
+        return None, _response(400, {"ok": False, "error": "invalid_session"})
+    item = _session_from(sid)
+    if not item:
+        return None, _response(404, {"ok": False, "error": "session_not_found"})
+    return item, None
+
+
+def _post_connect(event):
+    """Verify a user's connect stack by assuming its role, then mint a session id.
+    The ExternalId + trust policy are enforced by STS; we only ever hold the
+    role ARN and ExternalId, never long-lived credentials."""
+    try:
+        body = json.loads(event.get("body") or "")
+    except json.JSONDecodeError:
+        return _response(400, {"ok": False, "error": "invalid_json"})
+    role_arn = body.get("roleArn", "")
+    external_id = body.get("externalId", "")
+    if not (isinstance(role_arn, str) and ROLE_ARN_RE.match(role_arn)):
+        return _response(400, {"ok": False, "error": "invalid_role_arn",
+                               "detail": "expected arn:aws:iam::<account>:role/ClusterbreakDeployRole"})
+    if not (isinstance(external_id, str) and EXTERNAL_ID_RE.match(external_id)):
+        return _response(400, {"ok": False, "error": "invalid_external_id"})
+    try:
+        session = _assume(role_arn, external_id)
+        account_id = session.client("sts", region_name=REGION).get_caller_identity()["Account"]
+    except Exception as e:
+        print(f"connect assume failed: {e!r}", flush=True)
+        return _response(403, {"ok": False, "error": "assume_failed",
+                               "detail": "check the role ARN + ExternalId and that the connect stack is deployed"})
+    gpu_quota = None
+    try:
+        q = session.client("service-quotas", region_name=REGION).get_service_quota(
+            ServiceCode="ec2", QuotaCode="L-DB2E81BA")
+        gpu_quota = q["Quota"]["Value"]
+    except Exception:
+        pass
+    session_id = "".join(random.choices(ID_ALPHABET, k=16))
+    now = int(time.time())
+    try:
+        _get_sessions().put_item(Item={
+            "id": session_id,
+            "roleArn": role_arn,
+            "externalId": external_id,
+            "accountId": account_id,
+            "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+            "expiresAt": now + SESSION_TTL_HOURS * 3600,
+        })
+    except Exception as e:
+        print(f"session store failed: {e!r}", flush=True)
+        return _response(503, {"ok": False, "error": "storage_unavailable"})
+    return _response(200, {"ok": True, "sessionId": session_id, "accountId": account_id,
+                           "region": REGION, "gpuQuotaVcpus": gpu_quota, "expiresInHours": SESSION_TTL_HOURS})
+
+
+def _post_provision(event):
+    try:
+        body = json.loads(event.get("body") or "")
+    except json.JSONDecodeError:
+        return _response(400, {"ok": False, "error": "invalid_json"})
+    item, err = _load_session(body)
+    if err:
+        return err
+    stack_name = body.get("stackName", "")
+    if not (isinstance(stack_name, str) and STACK_RE.match(stack_name)):
+        return _response(400, {"ok": False, "error": "invalid_stack_name",
+                               "detail": "clusterbreak-<lowercase/digits/dashes>"})
+    template = body.get("template", "")
+    if not (isinstance(template, str) and 100 < len(template) <= MAX_TEMPLATE_CHARS):
+        return _response(400, {"ok": False, "error": "invalid_template"})
+    if "AWSTemplateFormatVersion" not in template:
+        return _response(400, {"ok": False, "error": "not_cloudformation"})
+    key_name = body.get("keyName", "")
+    ssh_cidr = body.get("sshCidr", "")
+    if not (isinstance(key_name, str) and re.match(r"^[\w-]{1,255}$", key_name)):
+        return _response(400, {"ok": False, "error": "invalid_key_name"})
+    if not (isinstance(ssh_cidr, str) and re.match(r"^\d{1,3}(\.\d{1,3}){3}/\d{1,2}$", ssh_cidr)):
+        return _response(400, {"ok": False, "error": "invalid_ssh_cidr", "detail": "e.g. 1.2.3.4/32"})
+    params = [
+        {"ParameterKey": "KeyName", "ParameterValue": key_name},
+        {"ParameterKey": "SshCidr", "ParameterValue": ssh_cidr},
+        {"ParameterKey": "Mode", "ParameterValue": body.get("mode", "on-demand")},
+        {"ParameterKey": "GpuMode", "ParameterValue": body.get("gpuMode", "gpu")},
+        {"ParameterKey": "ContextTokens", "ParameterValue": str(int(body.get("contextTokens", 4096)))},
+    ]
+    if isinstance(body.get("modelUrl"), str) and body["modelUrl"].startswith("https://"):
+        params.append({"ParameterKey": "ModelUrl", "ParameterValue": body["modelUrl"][:500]})
+    try:
+        session = _assume(item["roleArn"], item["externalId"])
+        cfn = session.client("cloudformation", region_name=REGION)
+        res = cfn.create_stack(
+            StackName=stack_name,
+            TemplateBody=template,
+            Parameters=params,
+            RoleARN=f"arn:aws:iam::{item['accountId']}:role/{EXEC_ROLE_NAME}",
+            OnFailure="DELETE",
+            Tags=[{"Key": "created-by", "Value": "clusterbreak"}],
+        )
+    except Exception as e:
+        detail = str(e)[:200]
+        if "AlreadyExists" in str(e):
+            return _response(409, {"ok": False, "error": "stack_exists"})
+        print(f"provision failed: {e!r}", flush=True)
+        return _response(502, {"ok": False, "error": "provision_failed", "detail": detail})
+    return _response(202, {"ok": True, "stackId": res["StackId"], "stackName": stack_name,
+                           "accountId": item["accountId"]})
+
+
+def _get_status(session_id, stack_name):
+    if not (SESSION_RE.match(session_id or "") and STACK_RE.match(stack_name or "")):
+        return _response(400, {"ok": False, "error": "bad_params"})
+    item = _session_from(session_id)
+    if not item:
+        return _response(404, {"ok": False, "error": "session_not_found"})
+    try:
+        session = _assume(item["roleArn"], item["externalId"])
+        cfn = session.client("cloudformation", region_name=REGION)
+        res = cfn.describe_stacks(StackName=stack_name)["Stacks"][0]
+    except Exception as e:
+        if "does not exist" in str(e):
+            return _response(404, {"ok": False, "error": "stack_not_found"})
+        print(f"status failed: {e!r}", flush=True)
+        return _response(502, {"ok": False, "error": "status_failed", "detail": str(e)[:200]})
+    outputs = {o["OutputKey"]: o["OutputValue"] for o in res.get("Outputs", [])}
+    reason = res.get("StackStatusReason")
+    if res["StackStatus"].endswith("FAILED") and not reason:
+        try:
+            for ev in cfn.describe_stack_events(StackName=stack_name)["StackEvents"]:
+                if ev.get("ResourceStatus", "").endswith("FAILED") and ev.get("ResourceStatusReason"):
+                    reason = ev["ResourceStatusReason"]
+                    break
+        except Exception:
+            pass
+    return _response(200, {"ok": True, "status": res["StackStatus"], "reason": reason,
+                           "outputs": outputs, "accountId": item["accountId"]})
+
+
+def _post_teardown(event):
+    try:
+        body = json.loads(event.get("body") or "")
+    except json.JSONDecodeError:
+        return _response(400, {"ok": False, "error": "invalid_json"})
+    item, err = _load_session(body)
+    if err:
+        return err
+    stack_name = body.get("stackName", "")
+    if not (isinstance(stack_name, str) and STACK_RE.match(stack_name)):
+        return _response(400, {"ok": False, "error": "invalid_stack_name"})
+    try:
+        session = _assume(item["roleArn"], item["externalId"])
+        session.client("cloudformation", region_name=REGION).delete_stack(StackName=stack_name)
+    except Exception as e:
+        print(f"teardown failed: {e!r}", flush=True)
+        return _response(502, {"ok": False, "error": "teardown_failed", "detail": str(e)[:200]})
+    return _response(200, {"ok": True, "stackName": stack_name, "status": "DELETE_IN_PROGRESS"})
+
+
 def route(method, path, event):
     if method == "OPTIONS":
         return _response(
@@ -181,11 +377,22 @@ def route(method, path, event):
     if method == "GET" and path == "/health":
         return _response(200, {"ok": True, "service": SERVICE, "version": VERSION, "time": int(time.time())})
     if method == "GET" and path == "/":
-        return _response(200, {"ok": True, "service": SERVICE, "version": VERSION, "hint": "GET /health · POST /runs · GET /runs/{id}"})
+        return _response(200, {"ok": True, "service": SERVICE, "version": VERSION, "hint": "GET /health · POST /runs · GET /runs/{id} · POST /aws/connect · POST /aws/provision · GET /aws/status/{session}/{stack} · POST /aws/teardown"})
     if method == "POST" and path == "/runs":
         return _post_runs(event)
     if method == "GET" and path.startswith("/runs/"):
         return _get_run(path[len("/runs/"):])
+    if method == "POST" and path == "/aws/connect":
+        return _post_connect(event)
+    if method == "POST" and path == "/aws/provision":
+        return _post_provision(event)
+    if method == "GET" and path.startswith("/aws/status/"):
+        parts = path[len("/aws/status/"):].split("/")
+        if len(parts) == 2:
+            return _get_status(parts[0], parts[1])
+        return _response(400, {"ok": False, "error": "bad_path"})
+    if method == "POST" and path == "/aws/teardown":
+        return _post_teardown(event)
     return _response(404, {"ok": False, "error": "not_found", "path": path})
 
 
