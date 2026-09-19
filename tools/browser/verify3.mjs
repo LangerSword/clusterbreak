@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 
-const url = process.argv[2] ?? "https://d1at2woaiwy2hz.cloudfront.net/";
+const url = process.argv[2] ?? "https://clusterbreak.langersword.in/";
 const browser = await chromium.launch({
   executablePath:
     process.env.CHROME_PATH ??

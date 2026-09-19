@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 
-const base = process.argv[2] ?? "https://d1at2woaiwy2hz.cloudfront.net/";
+const base = process.argv[2] ?? "https://clusterbreak.langersword.in/";
 const CHROME =
   process.env.CHROME_PATH ??
   "/home/lakshaya/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome";

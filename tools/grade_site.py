@@ -25,7 +25,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BASE = "https://d1at2woaiwy2hz.cloudfront.net"
+BASE = "https://clusterbreak.langersword.in"  # canonical (CloudFront alias, ACM cert us-east-1)
+LEGACY = "https://d1at2woaiwy2hz.cloudfront.net"
 
 FAILURES: list[str] = []
 NOTES: list[str] = []
@@ -42,8 +43,8 @@ def check(name: str, ok: bool, detail: str = "") -> None:
     print(f"  {'PASS' if ok else 'FAIL'}  {name}{' — ' + detail if detail and not ok else ''}")
 
 
-def fetch(path: str) -> str:
-    req = urllib.request.Request(BASE + path, headers={"user-agent": "clusterbreak-grader"})
+def fetch(path: str, base: str = BASE) -> str:
+    req = urllib.request.Request(base + path, headers={"user-agent": "clusterbreak-grader"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return r.read().decode("utf-8", errors="replace")
 
@@ -51,6 +52,11 @@ def fetch(path: str) -> str:
 def find_asset(html: str, pattern: str) -> str | None:
     m = re.search(pattern, html)
     return m.group(1) if m else None
+
+
+def has_canonical(html: str, path: str) -> bool:
+    """The page must declare the canonical host + exact path."""
+    return f'rel="canonical" href="{BASE}{path}"' in html
 
 
 def hardcoded_stat_numbers(js: str) -> list[str]:
@@ -133,6 +139,17 @@ def main() -> int:
 
     print("== D6: legacy link forwarding ==")
     check("old ?report=/?preset= forwarding script present", "app.html" in landing_html and "report" in landing_html)
+
+    print("== D6b: custom domain ==")
+    pages = {"/": landing_html, "/app.html": app_html, "/docs.html": docs_html}
+    for path, html in pages.items():
+        check(f"canonical tag on {path}", has_canonical(html, path), "canonical missing or wrong host")
+    try:
+        legacy_html = fetch("/", LEGACY)
+        check("legacy CloudFront domain still serves (no broken old links)", "clusterbreak" in legacy_html.lower())
+    except Exception as e:  # noqa: BLE001
+        check("legacy CloudFront domain still serves (no broken old links)", False, str(e))
+    CONTROLS.append(("canonical drift detected", not has_canonical('<link rel="canonical" href="https://evil.example/" />', "/")))
 
     print("== D7: contract tokens == site.css ==")
     design = (ROOT / "DESIGN.md").read_text()

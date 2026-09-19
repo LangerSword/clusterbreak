@@ -6,10 +6,37 @@ Everything lives in **ap-south-1 (Mumbai)**. Deploys are script-driven — no co
 
 | Piece | Where |
 |---|---|
-| Frontend | https://d1at2woaiwy2hz.cloudfront.net — S3 `clusterbreak-703651068111-frontend` behind CloudFront `EX9Y84FE8SFH3` (OAC `E30OI2CJKLSOHS`, bucket private) |
+| Frontend | **https://clusterbreak.langersword.in** (canonical) — also reachable at https://d1at2woaiwy2hz.cloudfront.net — S3 `clusterbreak-703651068111-frontend` behind CloudFront `EX9Y84FE8SFH3` (OAC `E30OI2CJKLSOHS`, bucket private) |
+| Domain | `clusterbreak.langersword.in` → CNAME → `d1at2woaiwy2hz.cloudfront.net`; ACM cert `9a8672c7-d65a-40e7-8d0a-6479991a720a` (**us-east-1**, DNS-validated) attached to the distribution; DNS lives at **Cloudflare** (zone `44e47a40e0c462aa4d2f4e3ca28991ee`), both records **DNS-only (grey cloud)** |
 | API | https://wa7rwqxhk0.execute-api.ap-south-1.amazonaws.com — `GET /health` |
 | Lambda | `clusterbreak-api` (python3.13, 256MB, 10s timeout) |
 | IAM | role `clusterbreak-lambda-role` (basic execution) |
+
+## Custom domain (done Sep 19, for the record)
+
+CloudFront certs **must** live in **us-east-1** (the distribution region's ACM is not used). Cloudflare is the DNS host — records are API-managed with `$CLOUDFLARE_API_TOKEN`.
+
+```bash
+# 1. cert (us-east-1!) + DNS validation record
+aws acm request-certificate --region us-east-1 \
+  --domain-name clusterbreak.langersword.in --validation-method DNS
+aws acm describe-certificate --region us-east-1 --certificate-arn <arn> \
+  --query 'Certificate.DomainValidationOptions[0].ResourceRecord'
+
+# 2. put the validation CNAME in Cloudflare (DNS-only), wait for ISSUED (took ~1 min)
+
+# 3. add alias + cert to the distribution (get ETag first, then --if-match it)
+aws cloudfront get-distribution-config --id EX9Y84FE8SFH3   # save ETag
+#    edit config: Aliases={Quantity:1,Items:[clusterbreak.langersword.in]},
+#    ViewerCertificate={ACMCertificateArn:...,SSLSupportMethod:sni-only,
+#                       MinimumProtocolVersion:TLSv1.2_2021,CertificateSource:acm}
+aws cloudfront update-distribution --id EX9Y84FE8SFH3 \
+  --distribution-config file:///tmp/dist-config.json --if-match <ETag>
+
+# 4. CNAME clusterbreak → d1at2woaiwy2hz.cloudfront.net (DNS-only, not proxied)
+```
+
+**Cloudflare must be DNS-only (grey cloud)** for the CloudFront CNAME — proxying it would put a second CDN in front and fight over TLS/headers. CORS on the API is `access-control-allow-origin: *`, so the new origin works without any backend change; share links use `window.location.origin`, so they automatically use the new domain.
 
 ## Redeploy
 
@@ -67,6 +94,8 @@ aws lambda add-permission --function-name clusterbreak-api --statement-id apigw-
 - **DynamoDB rejects Python floats from boto3** — parse JSON with `parse_float=decimal.Decimal`, serialize Decimals back to numbers on read. Symptom: silent 503s on POST /runs.
 - **Module-level `_table = None` + `def _table()` shadows the cache** — name the accessor differently (`_get_table`). Symptom: `'function' object has no attribute 'put_item'` from CloudWatch.
 - **Debugging cold Lambda: run the deployed zip locally** with real credentials (uv venv + boto3) — faster and more honest than CloudWatch-filter archaeology; you get the real exception straight away.
+- **`aws cloudfront get-distribution --query 'Distribution.{aliases:Aliases}'` printed `null` for a correctly-set alias** — the shorthand query lied; the raw `DistributionConfig.Aliases` had it. When a value matters, read the raw JSON, not a query shorthand.
+- **ACM certs for CloudFront must be in us-east-1** — a cert in the distribution's own region (ap-south-1) is silently unusable for CloudFront.
 
 ## Runs API deployment (v0.2)
 1. `aws dynamodb create-table --table-name clusterbreak-runs --attribute-definitions AttributeName=id,AttributeType=S --key-schema AttributeName=id,KeyType=HASH --billing-mode PAY_PER_REQUEST` (+ TTL on `expiresAt` once ACTIVE).

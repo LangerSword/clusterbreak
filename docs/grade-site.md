@@ -1,11 +1,11 @@
 # Site grade — Clusterbreak (deterministic grader)
 
-*Run: 2026-09-19 19:08 UTC · grader: `tools/grade_site.py` · target: deployed site.*
+*Run: 2026-09-19 19:32 UTC · grader: `tools/grade_site.py` · target: deployed site.*
 
 | | |
 |---|---|
-| checks | **18/18** |
-| negative controls | **4/4 caught** |
+| checks | **22/22** |
+| negative controls | **5/5 caught** |
 
 ## Failures
 
