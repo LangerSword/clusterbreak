@@ -22,7 +22,7 @@ export function SharedReport({ id }: { id: string }) {
     };
   }, [id]);
 
-  const base = window.location.origin;
+  const base = `${window.location.origin}/app.html`;
   if (state.kind === "loading") {
     return (
       <div className="shared">

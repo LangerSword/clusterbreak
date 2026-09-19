@@ -264,7 +264,7 @@ export default function App() {
         }
       }
       lines.push("DATA    sizes: Hugging Face API · efficiencies: measured campaigns (unverified marked ~)");
-      if (lastPreset) lines.push(`OPEN    ${window.location.origin}/?preset=${lastPreset}`);
+      if (lastPreset) lines.push(`OPEN    ${window.location.origin}/app.html?preset=${lastPreset}`);
       return lines.join("\n");
     } catch {
       return null;
@@ -361,7 +361,7 @@ export default function App() {
         }),
       });
       const id = await shareRun(payload);
-      setShare({ status: "done", url: `${window.location.origin}/?report=${id}` });
+      setShare({ status: "done", url: `${window.location.origin}/app.html?report=${id}` });
     } catch (e) {
       setShare({ status: "error", error: e instanceof Error ? e.message : String(e) });
     }

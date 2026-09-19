@@ -6,13 +6,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Clusterbreak — build a virtual AI inference rig from real hardware, run a model, and break it on purpose."
+      content="Clusterbreak simulates AI inference across real hardware — measured benchmark data, honest fit verdicts, and a deploy kit that turns a virtual rig into real AWS infrastructure."
     />
     <meta name="theme-color" content="#0b0d10" />
-    <title>Clusterbreak — build a rig. run a model. break it.</title>
+    <meta property="og:title" content="Clusterbreak — build a rig. run a model. break it." />
+    <meta
+      property="og:description"
+      content="Plan GPU inference on real hardware, break it on purpose, read the postmortem, deploy it to your own AWS account."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <title>Clusterbreak — GPU inference you can break, honestly</title>
+    <script>
+      // Old share links (/?report=, /?preset=) were built when the simulator
+      // lived at /. Forward them so no link ever breaks.
+      (function () {
+        var q = new URLSearchParams(location.search);
+        if (q.has("report") || q.has("preset")) {
+          location.replace("/app.html" + location.search);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="/src/site/main-landing.tsx"></script>
   </body>
 </html>
