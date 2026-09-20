@@ -35,9 +35,9 @@ Where there is no measurement, the UI marks the value with a `~` and says *"no p
 
 Unplug a node mid-generation, cut the interconnect, cap VRAM. The postmortem does not just say *failed* — it traces the failure back to the exact constraint that produced it: memory, bandwidth, interconnect or compute. The report is a shareable link.
 
-**[ IMAGE 3 — the postmortem: click Insert image here and upload 3-postmortem.png ]**
+**[ IMAGE 3 — the break-it controls: click Insert image here and upload 3-break-it.png ]**
 
-*What died, why, and what to change — the causal chain, not just a red box.*
+*Pick the failure — unplug the weakest node, cap VRAM, cut the interconnect — then read the causal chain that follows.*
 
 ## Taking the same rig to AWS
 
