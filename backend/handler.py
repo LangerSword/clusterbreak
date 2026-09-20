@@ -22,9 +22,11 @@ import string
 import time
 
 import boto3
+import urllib.error
+import urllib.request
 
 SERVICE = "clusterbreak-api"
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 TABLE_NAME = os.environ.get("RUNS_TABLE", "clusterbreak-runs")
 SESSIONS_TABLE_NAME = os.environ.get("SESSIONS_TABLE", "clusterbreak-sessions")
 REGION = os.environ.get("AWS_REGION", "ap-south-1")
@@ -236,7 +238,20 @@ def _sweep():
             continue
         try:
             session = _assume(item["roleArn"], item["externalId"])
-            session.client("cloudformation", region_name=REGION).delete_stack(StackName=stack)
+            cfn = session.client("cloudformation", region_name=REGION)
+            # Guard: only sweep a stack that already existed when the timer was
+            # set. Reusing a stack name (the UI pre-fills one) used to let a
+            # stale record delete a rig that had just been created — the new
+            # stack must outlive the old record's teardownAt.
+            try:
+                st = cfn.describe_stacks(StackName=stack)["Stacks"][0]
+                created = st.get("CreationTime")
+                if created is not None and created.timestamp() > int(teardown_at):
+                    print(f"auto-teardown: skipping {stack} (created after its teardownAt)", flush=True)
+                    continue
+            except Exception:
+                pass
+            cfn.delete_stack(StackName=stack)
             _get_sessions().delete_item(Key={"id": item["id"]})
             swept += 1
             print(f"auto-teardown: deleted {stack} (session {item['id']})", flush=True)
@@ -315,8 +330,10 @@ def _post_provision(event):
         return _response(400, {"ok": False, "error": "invalid_key_name"})
     if not (isinstance(ssh_cidr, str) and re.match(r"^\d{1,3}(\.\d{1,3}){3}/\d{1,2}$", ssh_cidr)):
         return _response(400, {"ok": False, "error": "invalid_ssh_cidr", "detail": "e.g. 1.2.3.4/32"})
+    api_key = body.get("apiKey") or ("cbk-" + "".join(random.choices(ID_ALPHABET + ID_ALPHABET.upper(), k=32)))
     params = [
         {"ParameterKey": "KeyName", "ParameterValue": key_name},
+        {"ParameterKey": "ApiKey", "ParameterValue": api_key},
         {"ParameterKey": "SshCidr", "ParameterValue": ssh_cidr},
         {"ParameterKey": "Mode", "ParameterValue": body.get("mode", "on-demand")},
         {"ParameterKey": "GpuMode", "ParameterValue": body.get("gpuMode", "gpu")},
@@ -345,14 +362,36 @@ def _post_provision(event):
             return _response(409, {"ok": False, "error": "stack_exists"})
         print(f"provision failed: {e!r}", flush=True)
         return _response(502, {"ok": False, "error": "provision_failed", "detail": detail})
+    if teardown_hours <= 0:
+        try:
+            _get_sessions().update_item(
+                Key={"id": item["id"]},
+                UpdateExpression="SET stackName = :s, apiKey = :k",
+                ExpressionAttributeValues={":s": stack_name, ":k": api_key},
+            )
+        except Exception as e:
+            print(f"stack record failed: {e!r}", flush=True)
+    # Only the newest session may own a stack name: otherwise a previous
+    # record's teardownAt can sweep a rig that was just re-created under the
+    # same name (found live — the sweep deleted a brand-new rig).
+    try:
+        for other in _get_sessions().scan().get("Items", []):
+            if other.get("id") != item["id"] and other.get("stackName") == stack_name:
+                _get_sessions().update_item(
+                    Key={"id": other["id"]},
+                    UpdateExpression="REMOVE stackName, teardownAt",
+                )
+    except Exception as e:
+        print(f"stale claim cleanup failed: {e!r}", flush=True)
     if teardown_hours > 0:
         try:
             _get_sessions().update_item(
                 Key={"id": item["id"]},
-                UpdateExpression="SET stackName = :s, teardownAt = :t",
+                UpdateExpression="SET stackName = :s, teardownAt = :t, apiKey = :k",
                 ExpressionAttributeValues={
                     ":s": stack_name,
                     ":t": int(time.time() + teardown_hours * 3600),
+                    ":k": api_key,
                 },
             )
         except Exception as e:
@@ -408,7 +447,162 @@ def _post_teardown(event):
     except Exception as e:
         print(f"teardown failed: {e!r}", flush=True)
         return _response(502, {"ok": False, "error": "teardown_failed", "detail": str(e)[:200]})
+    try:
+        _get_sessions().update_item(
+            Key={"id": item["id"]},
+            UpdateExpression="REMOVE stackName, teardownAt",
+        )
+    except Exception as e:
+        print(f"claim release failed: {e!r}", flush=True)
     return _response(200, {"ok": True, "stackName": stack_name, "status": "DELETE_IN_PROGRESS"})
+
+
+def _session_stacks(session_id):
+    """The rigs Clusterbreak created in THIS account.
+
+    Deliberately not `describe_stacks()` with no name: listing every stack in
+    the account needs DescribeStacks on "*", which the connect role does not
+    grant (it is scoped to clusterbreak-* stacks). Instead we read the stack
+    names Clusterbreak itself recorded, then describe each one by name — the
+    scoped permission covers that, and we only ever show what we manage.
+    """
+    item = _session_from(session_id)
+    if not item:
+        return None, _response(404, {"ok": False, "error": "session_not_found"})
+    meta = {}
+    try:
+        for s_item in _get_sessions().scan().get("Items", []):
+            if s_item.get("accountId") != item["accountId"]:
+                continue
+            nm = s_item.get("stackName")
+            if isinstance(nm, str) and STACK_RE.match(nm):
+                meta[nm] = {
+                    "teardownAt": int(s_item["teardownAt"]) if s_item.get("teardownAt") else None,
+                    "apiKey": s_item.get("apiKey"),
+                    "mine": s_item.get("id") == session_id,
+                }
+    except Exception as e:
+        print(f"session scan failed: {e!r}", flush=True)
+        return None, _response(503, {"ok": False, "error": "storage_unavailable"})
+    stacks = []
+    if meta:
+        try:
+            session = _assume(item["roleArn"], item["externalId"])
+            cfn = session.client("cloudformation", region_name=REGION)
+        except Exception as e:
+            print(f"assume failed: {e!r}", flush=True)
+            return None, _response(403, {"ok": False, "error": "assume_failed"})
+        for name, m in meta.items():
+            try:
+                st = cfn.describe_stacks(StackName=name)["Stacks"][0]
+            except Exception:
+                continue  # deleted, or never created (failed provision) — not an error
+            if st.get("StackStatus") == "DELETE_COMPLETE":
+                continue
+            stacks.append({
+                "name": name,
+                "status": st.get("StackStatus"),
+                "createdAt": st.get("CreationTime").isoformat() if st.get("CreationTime") else None,
+                "outputs": {o["OutputKey"]: o["OutputValue"] for o in st.get("Outputs", [])},
+                "teardownAt": m["teardownAt"],
+                "apiKey": m["apiKey"],
+                "mine": m["mine"],
+            })
+    stacks.sort(key=lambda s: s.get("createdAt") or "", reverse=True)
+    # must go through _response(): a bare dict skips the CORS headers, and the
+    # browser then blocks the call ("blocked by CORS policy") while curl is
+    # perfectly happy — found live, never by the API tests.
+    return _response(200, {"ok": True, "accountId": item["accountId"], "stacks": stacks}), None
+
+
+def _api_key_for_stack(stack_name):
+    try:
+        for s_item in _get_sessions().scan().get("Items", []):
+            if s_item.get("stackName") == stack_name and s_item.get("apiKey"):
+                return s_item["apiKey"]
+    except Exception as e:
+        print(f"api key lookup failed: {e!r}", flush=True)
+    return None
+
+
+CHAT_TIMEOUT_S = 25
+MAX_CHAT_TOKENS = 512
+ROLES = {"system", "user", "assistant"}
+
+
+def _post_chat(event):
+    """Proxy a chat completion to the rig's llama.cpp server.
+
+    The browser talks HTTPS to us; we talk to the instance over its bearer key.
+    Direct browser → http://ec2 would be blocked as mixed content, and handing
+    the key to the page is unnecessary — so the key stays server-side."""
+    try:
+        body = json.loads(event.get("body") or "")
+    except json.JSONDecodeError:
+        return _response(400, {"ok": False, "error": "invalid_json"})
+    item, err = _load_session(body)
+    if err:
+        return err
+    stack_name = body.get("stackName", "")
+    if not (isinstance(stack_name, str) and STACK_RE.match(stack_name)):
+        return _response(400, {"ok": False, "error": "invalid_stack_name"})
+    messages = body.get("messages")
+    if not (isinstance(messages, list) and 1 <= len(messages) <= 24):
+        return _response(400, {"ok": False, "error": "invalid_messages", "detail": "1-24 messages"})
+    clean = []
+    for m in messages:
+        if not (isinstance(m, dict) and m.get("role") in ROLES and isinstance(m.get("content"), str)):
+            return _response(400, {"ok": False, "error": "invalid_message", "detail": "role + string content"})
+        if len(m["content"]) > 4000:
+            return _response(400, {"ok": False, "error": "message_too_long", "detail": "4000 chars max"})
+        clean.append({"role": m["role"], "content": m["content"]})
+    try:
+        max_tokens = int(body.get("maxTokens", 256))
+    except (TypeError, ValueError):
+        max_tokens = 256
+    max_tokens = max(16, min(MAX_CHAT_TOKENS, max_tokens))
+
+    try:
+        session = _assume(item["roleArn"], item["externalId"])
+        st = session.client("cloudformation", region_name=REGION).describe_stacks(StackName=stack_name)["Stacks"][0]
+    except Exception as e:
+        if "does not exist" in str(e):
+            return _response(404, {"ok": False, "error": "stack_not_found"})
+        return _response(502, {"ok": False, "error": "describe_failed", "detail": str(e)[:200]})
+    outputs = {o["OutputKey"]: o["OutputValue"] for o in st.get("Outputs", [])}
+    endpoint = outputs.get("Node1Endpoint") or outputs.get("LlamaCppUrl")
+    if not endpoint:
+        return _response(409, {"ok": False, "error": "no_endpoint",
+                               "detail": "stack has no endpoint output yet - wait for CREATE_COMPLETE"})
+    api_key = _api_key_for_stack(stack_name)
+    headers = {"content-type": "application/json"}
+    if api_key:
+        headers["authorization"] = f"Bearer {api_key}"
+    payload = {"messages": clean, "max_tokens": max_tokens, "temperature": 0.7, "stream": False}
+    req = urllib.request.Request(
+        endpoint.rstrip("/") + "/v1/chat/completions",
+        data=json.dumps(payload).encode(),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=CHAT_TIMEOUT_S) as r:
+            data = json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:300]
+        print(f"chat upstream {e.code}: {detail}", flush=True)
+        return _response(502, {"ok": False, "error": "upstream_error", "upstreamStatus": e.code, "detail": detail})
+    except Exception as e:
+        print(f"chat unreachable: {e!r}", flush=True)
+        return _response(504, {"ok": False, "error": "endpoint_unreachable",
+                               "detail": "the instance is still downloading/loading the model, or llama.cpp is not up yet"})
+    choice = (data.get("choices") or [{}])[0]
+    return _response(200, {
+        "ok": True,
+        "reply": (choice.get("message") or {}).get("content", ""),
+        "model": data.get("model"),
+        "usage": data.get("usage"),
+    })
 
 
 def route(method, path, event):
@@ -425,7 +619,7 @@ def route(method, path, event):
     if method == "GET" and path == "/health":
         return _response(200, {"ok": True, "service": SERVICE, "version": VERSION, "time": int(time.time())})
     if method == "GET" and path == "/":
-        return _response(200, {"ok": True, "service": SERVICE, "version": VERSION, "hint": "GET /health · POST /runs · GET /runs/{id} · POST /aws/connect · POST /aws/provision · GET /aws/status/{session}/{stack} · POST /aws/teardown"})
+        return _response(200, {"ok": True, "service": SERVICE, "version": VERSION, "hint": "GET /health · POST /runs · GET /runs/{id} · POST /aws/connect · POST /aws/provision · GET /aws/status/{session}/{stack} · GET /aws/stacks/{session} · POST /aws/chat · POST /aws/teardown"})
     if method == "POST" and path == "/runs":
         return _post_runs(event)
     if method == "GET" and path.startswith("/runs/"):
@@ -441,6 +635,11 @@ def route(method, path, event):
         return _response(400, {"ok": False, "error": "bad_path"})
     if method == "POST" and path == "/aws/teardown":
         return _post_teardown(event)
+    if method == "GET" and path.startswith("/aws/stacks/"):
+        payload, err = _session_stacks(path[len("/aws/stacks/"):])
+        return err or payload
+    if method == "POST" and path == "/aws/chat":
+        return _post_chat(event)
     return _response(404, {"ok": False, "error": "not_found", "path": path})
 
 

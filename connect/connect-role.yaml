@@ -73,7 +73,14 @@ Resources:
               - Sid: AmiLookup
                 Effect: Allow
                 Action: [ssm:GetParameter, ssm:GetParameters]
-                Resource: arn:aws:ssm:*::parameter/aws/service/canonical/*
+                Resource:
+                  - arn:aws:ssm:*::parameter/aws/service/canonical/*
+                  # GPU nodes run the AWS Deep Learning base AMI (driver +
+                  # container toolkit preinstalled), whose id also comes from a
+                  # public SSM parameter. Without this second path the stack
+                  # execution role cannot resolve the GPU AMI and every GPU
+                  # launch fails with AccessDenied on ssm:GetParameters.
+                  - arn:aws:ssm:*::parameter/aws/service/deeplearning/*
 
   DeployRole:
     Type: AWS::IAM::Role

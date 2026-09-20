@@ -11,6 +11,8 @@ Day 1 of a 4-day build (First Commit hackathon, Sep 17–20 2026). Repo history 
 
 **Live now:** https://clusterbreak.langersword.in — the interactive rig builder is up (place devices on the 3D board, wire them, get live tokens/s + fit verdicts) · `GET /health` on the API. The break-it scenarios land next.
 
+**Also live:** connect your own AWS account with a scoped, revocable role (no keys change hands) and provision the rig you simulated — then **chat with the model running on it** from the browser, or point any OpenAI-compatible harness at the endpoint. Running rigs are listed from the account itself, so a refresh (or a different browser) still shows what's up and can tear it down.
+
 ## Architecture (v0)
 - `frontend/` — static SPA (Vite + React + TS); the simulator runs fully client-side
 - `sim/` — the simulation engine (pure TypeScript, deterministic, unit-tested against cited real-world measurements)

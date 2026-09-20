@@ -103,3 +103,22 @@ aws lambda add-permission --function-name clusterbreak-api --statement-id apigw-
 3. `bash scripts/package_backend.sh` → `aws lambda update-function-code --function-name clusterbreak-api --zip-file fileb://backend/function.zip` → `update-function-configuration --environment 'Variables={RUNS_TABLE=clusterbreak-runs}'`.
 4. Routing is handled **inside** the Lambda (the HTTP API uses a `$default` route) — no route changes needed per endpoint.
 5. Verify: `python3 /tmp/api_test.py` (9 checks incl. negative cases: bad id → 400, unknown → 404, oversized → 413, preflight → 204).
+
+## Connect + chat API (v0.5.0)
+
+| Route | What it does |
+|---|---|
+| `POST /aws/connect` | assume the connect-stack role via STS, mint a 24h session |
+| `POST /aws/provision` | create the rig stack; **generates the per-stack llama.cpp bearer key server-side** and stores it on the session record |
+| `GET /aws/status/{session}/{stack}` | one stack's status/reason/outputs |
+| `GET /aws/stacks/{session}` | **every `clusterbreak-*` stack in the account** + teardownAt + apiKey — this is what makes a page refresh safe: the account is the source of truth, not the browser |
+| `POST /aws/chat` | proxy a chat completion to the rig's llama.cpp server with the stored key (25s upstream timeout; the API gateway closes at 30s, so replies are capped) |
+| `POST /aws/teardown` | delete a stack through the assumed role |
+
+Notes worth keeping:
+- **Lambda timeout is 29s** (raised from 10s for chat). API Gateway HTTP API integration timeout is 30s — that is the hard ceiling on reply length, which is why the UI caps `max_tokens` at 512.
+- **The chat proxy exists for two reasons**: an HTTPS page cannot call `http://<ip>:8080` (mixed content), and the instance key should never be shipped to a browser. The browser → Clusterbreak → instance path keeps the key server-side.
+- **Port 8080 is open to `0.0.0.0/0` on purpose** — the bearer key is the gate. That is what lets the endpoint be used from any harness or any network without knowing the caller's IP first. SSH stays pinned to `SshCidr`.
+- Session ids persist in `localStorage` (per browser). The **rig list is re-fetched from AWS on every load**, so reconnecting — even from another device — shows the same running stacks and can tear them down. A cleared browser simply reconnects; nothing about the account changes.
+- The auto-teardown sweep only deletes a stack that already existed when its timer was set (`CreationTime > teardownAt` → skip), and a new provision takes ownership of a stack name from older session records. Both guards exist because a stale record once swept a rig that had just been re-created under the same name.
+- `session_not_found` on refresh is treated as "session expired", not an app error: the panel drops to the connect state and says so.

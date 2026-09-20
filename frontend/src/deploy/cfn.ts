@@ -147,25 +147,41 @@ export function buildTemplate(a: TemplateArgs): string {
   Node${i + 1}LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
-      LaunchTemplateName: clusterbreak-${a.rigLabel}-node${i + 1}
+      # No LaunchTemplateName on purpose: a hardcoded name collides with any
+      # leftover from a previous failed attempt ("Launch template name already
+      # in use"), so CloudFormation generates a unique one instead.
       LaunchTemplateData:
-        ImageId: "{{resolve:ssm:/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id}}"
+        ImageId: !If
+          - IsGpu
+          - "{{resolve:ssm:/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-24.04/latest/ami-id}}"
+          - "{{resolve:ssm:/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id}}"
         InstanceType: ${n.instanceType}
         KeyName: !Ref KeyName
         SecurityGroupIds: [!Ref NodeSecurityGroup]
         InstanceMarketOptions: !If [IsSpot, { MarketType: spot }, !Ref "AWS::NoValue"]
         MetadataOptions: { HttpEndpoint: enabled, HttpTokens: required, HttpPutResponseHopLimit: 1 }
+        # 100 GB: the Deep Learning base AMI's snapshot is 75 GB, and the
+        # model needs room on top of that (60 GB failed with 'smaller than snapshot')
         BlockDeviceMappings:
           - DeviceName: /dev/sda1
-            Ebs: { VolumeSize: 60, VolumeType: gp3 }
+            Ebs: { VolumeSize: 100, VolumeType: gp3 }
         UserData:
           Fn::Base64: !Sub |
             #!/bin/bash
             set -euxo pipefail
             export DEBIAN_FRONTEND=noninteractive
             MODEL_URL="\${ModelUrl}"
-            apt-get update -y
-            apt-get install -y docker.io curl ca-certificates
+            if [ "\${GpuMode}" = "gpu" ]; then
+              # The Deep Learning AMI already ships docker + containerd.io.
+              # Installing docker.io on top of it fails ("containerd.io :
+              # Conflicts: containerd") and, under set -e, that killed the
+              # whole bootstrap before the model was ever downloaded.
+              command -v docker >/dev/null 2>&1 || (apt-get update -y && apt-get install -y docker.io)
+              command -v curl >/dev/null 2>&1 || (apt-get update -y && apt-get install -y curl ca-certificates)
+            else
+              apt-get update -y
+              apt-get install -y docker.io curl ca-certificates
+            fi
             systemctl enable --now docker
             mkdir -p /opt/clusterbreak/models
             cd /opt/clusterbreak
@@ -184,7 +200,9 @@ export function buildTemplate(a: TemplateArgs): string {
             fi
             MODEL_FILE="$(basename "$MODEL_URL")"
             docker rm -f llama 2>/dev/null || true
-            docker run -d --name llama --restart unless-stopped $GPU_FLAG -p 8080:8080 -v /opt/clusterbreak/models:/models "$IMAGE" -m "/models/$MODEL_FILE" --host 0.0.0.0 --port 8080 -c "$CTX"
+            API_FLAG=""
+            if [ -n "$API_KEY" ]; then API_FLAG="--api-key $API_KEY"; fi
+            docker run -d --name llama --restart unless-stopped $GPU_FLAG -p 8080:8080 -v /opt/clusterbreak/models:/models "$IMAGE" -m "/models/$MODEL_FILE" --host 0.0.0.0 --port 8080 -c "$CTX" $API_FLAG
             SCRIPT
             chmod +x /opt/clusterbreak/start-llama.sh
 
@@ -197,40 +215,41 @@ export function buildTemplate(a: TemplateArgs): string {
             [Service]
             Type=oneshot
             RemainAfterExit=yes
+            Restart=on-failure
+            RestartSec=45
+            StartLimitIntervalSec=0
+            StandardOutput=journal+console
+            StandardError=journal+console
             Environment=GPU_MODE=\${GpuMode}
             Environment=CTX=\${ContextTokens}
             Environment=MODEL_URL=\${ModelUrl}
-            ExecStartPre=/bin/bash -c 'if [ "$GPU_MODE" = "gpu" ]; then for i in $(seq 1 90); do nvidia-smi -L >/dev/null 2>&1 && exit 0; sleep 5; done; exit 1; fi'
+            Environment=API_KEY=\${ApiKey}
+            ExecStartPre=/bin/bash -c 'if [ "$GPU_MODE" = "gpu" ]; then for i in $(seq 1 180); do nvidia-smi -L >/dev/null 2>&1 && exit 0; sleep 10; done; exit 1; fi'
             ExecStart=/bin/bash /opt/clusterbreak/start-llama.sh
 
             [Install]
             WantedBy=multi-user.target
             UNIT
 
-            NEED_REBOOT=0
+            # GPU nodes run the AWS Deep Learning base AMI (driver + container
+            # toolkit preinstalled). Installing the driver in userdata only
+            # sometimes worked: nouveau had to be blacklisted, the driver needed
+            # a machine restart, and a unit that started too early simply died.
+            # With the DLAMI there is nothing to install and nothing to restart.
             if [ "\${GpuMode}" = "gpu" ]; then
-              echo "blacklist nouveau" > /etc/modprobe.d/blacklist-nouveau.conf
-              echo "options nouveau modeset=0" >> /etc/modprobe.d/blacklist-nouveau.conf
-              update-initramfs -u
-              apt-get install -y ubuntu-drivers-common
-              if ! ubuntu-drivers install --gpgpu; then ubuntu-drivers install; fi
-              curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-              curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' > /etc/apt/sources.list.d/nvidia-container-toolkit.list
-              apt-get update -y
-              apt-get install -y nvidia-container-toolkit
-              nvidia-ctk runtime configure --runtime=docker
+              for i in $(seq 1 30); do nvidia-smi -L && break; sleep 10; done
+              nvidia-smi -L || echo "WARNING: nvidia-smi still failing - llama.cpp will not start"
+              if ! command -v nvidia-ctk >/dev/null 2>&1; then
+                curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+                curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' > /etc/apt/sources.list.d/nvidia-container-toolkit.list
+                apt-get update -y && apt-get install -y nvidia-container-toolkit
+              fi
+              nvidia-ctk runtime configure --runtime=docker || true
               systemctl restart docker
-              if ! nvidia-smi -L >/dev/null 2>&1; then NEED_REBOOT=1; fi
             fi
 
             systemctl daemon-reload
-            systemctl enable clusterbreak-llama.service
-            if [ "$NEED_REBOOT" = "1" ]; then
-              echo "nvidia driver installed but not yet active - rebooting; the systemd unit starts llama.cpp on boot"
-              reboot
-            else
-              systemctl start clusterbreak-llama.service
-            fi
+            systemctl enable --now clusterbreak-llama.service
 
   Node${i + 1}:
     Type: AWS::EC2::Instance
@@ -287,9 +306,17 @@ Parameters:
   ContextTokens:
     Type: Number
     Default: ${a.contextTokens}
+  ApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: >-
+      Bearer token llama.cpp requires on every request (--api-key). Generated by
+      Clusterbreak per stack; leave empty only for a throwaway test box.
 
 Conditions:
   IsSpot: !Equals [!Ref Mode, spot]
+  IsGpu: !Equals [!Ref GpuMode, gpu]
 
 Resources:
   Vpc:
@@ -298,7 +325,7 @@ Resources:
       CidrBlock: 10.42.0.0/16
       EnableDnsSupport: true
       EnableDnsHostnames: true
-      Tags: [{ Key: Name, Value: !Sub "clusterbreak-${a.rigLabel}-vpc" }]
+      Tags: [{ Key: Name, Value: "clusterbreak-${a.rigLabel}-vpc" }]
   Igw:
     Type: AWS::EC2::InternetGateway
   IgwAttachment:
@@ -331,7 +358,11 @@ Resources:
       VpcId: !Ref Vpc
       SecurityGroupIngress:
         - { IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref SshCidr }
-        - { IpProtocol: tcp, FromPort: 8080, ToPort: 8080, CidrIp: !Ref SshCidr }
+        # 8080 is open to the internet on purpose: the endpoint is gated by the
+        # per-stack bearer key (llama.cpp --api-key), which is what lets you hit
+        # it from any harness or from Clusterbreak's proxy without knowing the
+        # caller's IP in advance. Empty key = nobody should run it that way.
+        - { IpProtocol: tcp, FromPort: 8080, ToPort: 8080, CidrIp: 0.0.0.0/0, Description: llama.cpp API (bearer key required) }
         - { IpProtocol: -1, CidrIp: 10.42.0.0/16, Description: intra-VPC (node-to-node) }
 
 ${nodeResources}
@@ -339,7 +370,10 @@ Outputs:${outputs}
 
   QuickCheck:
     Description: Poll any endpoint until it answers (model download takes a few minutes)
-    Value: !Sub "curl http://\${Node1.PublicIp}:8080/v1/models"
+    Value: !Sub "curl -H 'Authorization: Bearer <api-key>' http://\${Node1.PublicIp}:8080/v1/models"
+  Harness:
+    Description: Point any OpenAI-compatible client at the endpoint (key from the Clusterbreak panel)
+    Value: !Sub "OPENAI_BASE_URL=http://\${Node1.PublicIp}:8080/v1 OPENAI_API_KEY=<api-key>"
   Teardown:
     Description: Remove everything (stops all billing)
     Value: !Sub "aws cloudformation delete-stack --stack-name \${AWS::StackName} --region \${AWS::Region}"

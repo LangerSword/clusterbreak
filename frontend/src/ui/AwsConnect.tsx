@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   connectAws,
   connectStackUrl,
   generateExternalId,
-  getStackStatus,
+  listStacks,
   provisionRig,
   teardownRig,
   type AwsSession,
+  type RigStack,
 } from "../api";
+import { ChatDrawer } from "./ChatDrawer";
 
 /**
  * Connect your own AWS account — the production flow.
@@ -27,6 +29,14 @@ const SS = {
 };
 
 const TERMINAL = /^(CREATE|UPDATE|DELETE)_(COMPLETE|FAILED|ROLLBACK_COMPLETE)$/;
+
+const fmtTeardown = (ts: number | null) => {
+  if (!ts) return "no auto-teardown";
+  const mins = Math.round((ts * 1000 - Date.now()) / 60000);
+  if (mins <= 0) return "teardown due";
+  if (mins < 90) return `auto-teardown in ${mins}m`;
+  return `auto-teardown in ${Math.round(mins / 60)}h`;
+};
 
 export interface AwsConnectProps {
   /** The generated CloudFormation template for the current rig (null = no deployable rig). */
@@ -50,17 +60,17 @@ export function AwsConnect({
   gpuMode,
 }: AwsConnectProps) {
   const [open, setOpen] = useState(false);
-  const [extId, setExtId] = useState(() => sessionStorage.getItem(SS.ext) ?? "");
+  const [extId, setExtId] = useState(() => localStorage.getItem(SS.ext) ?? "");
   const [session, setSession] = useState<AwsSession | null>(() => {
     try {
-      const raw = sessionStorage.getItem(SS.session);
+      const raw = localStorage.getItem(SS.session);
       return raw ? (JSON.parse(raw) as AwsSession) : null;
     } catch {
       return null;
     }
   });
   const [roleArn, setRoleArn] = useState("");
-  const [busy, setBusy] = useState<null | "connect" | "provision" | "teardown">(null);
+  const [busy, setBusy] = useState<null | "connect" | "provision" | "teardown" | "refresh">(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -68,10 +78,9 @@ export function AwsConnect({
   const [sshCidr, setSshCidr] = useState("");
   const [teardownHours, setTeardownHours] = useState(6);
   const [mode, setMode] = useState<"on-demand" | "spot">("on-demand");
-  const [stackName, setStackName] = useState(() => sessionStorage.getItem(SS.stack) ?? defaultStackName);
-  const [stack, setStack] = useState<{ status: string; reason: string | null; outputs: Record<string, string> } | null>(
-    null,
-  );
+  const [stackName, setStackName] = useState(() => localStorage.getItem(SS.stack) ?? defaultStackName);
+  const [stacks, setStacks] = useState<RigStack[]>([]);
+  const [chatStack, setChatStack] = useState<RigStack | null>(null);
 
   const pollRef = useRef<number | null>(null);
 
@@ -80,22 +89,47 @@ export function AwsConnect({
     if (!extId) {
       const id = generateExternalId();
       setExtId(id);
-      sessionStorage.setItem(SS.ext, id);
+      localStorage.setItem(SS.ext, id);
     }
   }, [extId]);
 
   useEffect(() => {
-    if (session) sessionStorage.setItem(SS.session, JSON.stringify(session));
-    else sessionStorage.removeItem(SS.session);
+    if (session) localStorage.setItem(SS.session, JSON.stringify(session));
+    else localStorage.removeItem(SS.session);
   }, [session]);
 
   useEffect(() => {
-    sessionStorage.setItem(SS.stack, stackName);
+    localStorage.setItem(SS.stack, stackName);
   }, [stackName]);
 
-  // poll stack status while a transition is in flight
+  /** Re-read every clusterbreak-* stack from the account (source of truth). */
+  const refresh = useCallback(async (sid: string, quiet = false) => {
+    if (!quiet) setBusy("refresh");
+    try {
+      const { stacks: list } = await listStacks(sid);
+      setStacks(list);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/session_not_found/.test(msg)) {
+        setSession(null);
+        setStacks([]);
+        setError("session expired — reconnect to keep managing rigs");
+      } else if (!quiet) {
+        setError(msg);
+      }
+    } finally {
+      if (!quiet) setBusy(null);
+    }
+  }, []);
+
+  // on load / on reconnect: re-discover rigs from AWS so a refresh loses nothing
   useEffect(() => {
-    const inFlight = stack && !TERMINAL.test(stack.status);
+    if (session) void refresh(session.sessionId, true);
+  }, [session, refresh]);
+
+  // poll while any stack is mid-transition
+  useEffect(() => {
+    const inFlight = stacks.some((st) => !TERMINAL.test(st.status));
     if (!session || !inFlight) {
       if (pollRef.current) {
         window.clearInterval(pollRef.current);
@@ -104,25 +138,14 @@ export function AwsConnect({
       return;
     }
     if (pollRef.current) return;
-    pollRef.current = window.setInterval(async () => {
-      try {
-        const s = await getStackStatus(session.sessionId, stackName);
-        setStack({ status: s.status, reason: s.reason, outputs: s.outputs });
-        if (TERMINAL.test(s.status) && pollRef.current) {
-          window.clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-    }, 6000);
+    pollRef.current = window.setInterval(() => void refresh(session.sessionId, true), 8000);
     return () => {
       if (pollRef.current) {
         window.clearInterval(pollRef.current);
         pollRef.current = null;
       }
     };
-  }, [session, stack, stackName]);
+  }, [session, stacks, refresh]);
 
   const copy = (label: string, text: string) => {
     navigator.clipboard?.writeText(text).then(() => {
@@ -161,8 +184,8 @@ export function AwsConnect({
         modelUrl,
         autoTeardownHours: teardownHours,
       });
-      setStack({ status: "CREATE_IN_PROGRESS", reason: null, outputs: {} });
       void r;
+      await refresh(session.sessionId, true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -170,13 +193,13 @@ export function AwsConnect({
     }
   };
 
-  const doTeardown = async () => {
+  const doTeardown = async (name: string) => {
     if (!session) return;
     setBusy("teardown");
     setError(null);
     try {
-      await teardownRig(session.sessionId, stackName);
-      setStack((s) => ({ status: "DELETE_IN_PROGRESS", reason: null, outputs: s?.outputs ?? {} }));
+      await teardownRig(session.sessionId, name);
+      await refresh(session.sessionId, true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -184,14 +207,7 @@ export function AwsConnect({
     }
   };
 
-  const statusTone = useMemo(() => {
-    if (!stack) return "";
-    if (stack.status.endsWith("COMPLETE")) return stack.status.startsWith("DELETE") ? "down" : "up";
-    if (stack.status.endsWith("FAILED")) return "down";
-    return "checking";
-  }, [stack]);
-
-  const endpoint = stack?.outputs?.LlamaCppUrl ?? stack?.outputs?.PublicIp ?? null;
+  const liveRigs = useMemo(() => stacks.filter((st) => !/^DELETE_COMPLETE/.test(st.status)), [stacks]);
 
   return (
     <section className="aws">
@@ -199,7 +215,7 @@ export function AwsConnect({
         <span className="aws-title">AWS ACCOUNT</span>
         <span className={`api-dot ${session ? "up" : ""}`} aria-hidden="true" />
         <span className="aws-state">
-          {session ? `${session.accountId} · connected` : "not connected"}
+          {session ? `${session.accountId} · ${liveRigs.length} rig${liveRigs.length === 1 ? "" : "s"}` : "not connected"}
         </span>
         <span className="aws-chevron">{open ? "▾" : "▸"}</span>
       </button>
@@ -282,7 +298,7 @@ export function AwsConnect({
               )}
 
               <div className="aws-step">
-                <span className="aws-step-n">3</span> provision this rig
+                <span className="aws-step-n">4</span> provision this rig
               </div>
               {!template ? (
                 <p className="note">
@@ -356,35 +372,54 @@ export function AwsConnect({
                     {busy === "provision" ? "CREATING STACK…" : "PROVISION IN MY ACCOUNT →"}
                   </button>
                   <p className="note">
-                    Auto-teardown is enforced server-side: an EventBridge sweep deletes this stack when the
-                    timer expires, even if this tab is closed.
+                    Every rig gets its own llama.cpp bearer key (generated server-side, never stored in this
+                    page) and an auto-teardown the backend enforces even if you close the tab.
                   </p>
                 </>
               )}
 
-              {stack && (
-                <div className="aws-status" aria-live="polite">
-                  <div className="aws-status-row">
-                    <span className={`api-dot ${statusTone}`} aria-hidden="true" />
-                    <b>{stack.status}</b>
-                    <button className="aws-alt" onClick={doTeardown} disabled={busy === "teardown" || !stack.status.startsWith("CREATE")}>
-                      {busy === "teardown" ? "tearing down…" : "tear down now"}
-                    </button>
-                  </div>
-                  {stack.reason && <p className="note error">{stack.reason.slice(0, 300)}</p>}
-                  {Object.entries(stack.outputs).map(([k, v]) => (
-                    <div className="kv" key={k}>
-                      <span>{k}</span>
-                      <b className="aws-out">{v}</b>
-                    </div>
-                  ))}
-                  {endpoint && stack.status === "CREATE_COMPLETE" && (
-                    <a className="aws-alt" href={`http://${endpoint}:8080/v1/models`} target="_blank" rel="noreferrer">
-                      open llama.cpp endpoint ↗
-                    </a>
-                  )}
-                </div>
+              <div className="aws-step">
+                <span className="aws-step-n">3</span> your rigs{" "}
+                <button className="aws-alt" onClick={() => void refresh(session.sessionId)} disabled={busy === "refresh"}>
+                  {busy === "refresh" ? "refreshing…" : "refresh"}
+                </button>
+              </div>
+              {liveRigs.length === 0 && (
+                <p className="note">
+                  Nothing running in this account. Provision one below — it shows up here, and survives a page
+                  refresh, because this list comes from AWS rather than from this tab.
+                </p>
               )}
+              {liveRigs.map((st) => {
+                const endpoint = st.outputs.Node1Endpoint ?? st.outputs.LlamaCppUrl ?? "";
+                const ready = st.status === "CREATE_COMPLETE";
+                return (
+                  <div className="rig" key={st.name}>
+                    <div className="rig-head">
+                      <span className={`api-dot ${ready ? "up" : /FAILED|ROLLBACK/.test(st.status) ? "down" : "checking"}`} />
+                      <b className="rig-name">{st.name}</b>
+                      <span className="rig-status">{st.status}</span>
+                    </div>
+                    <div className="rig-meta">
+                      {endpoint || "endpoint appears once the stack completes"} · {fmtTeardown(st.teardownAt)}
+                    </div>
+                    <div className="rig-actions">
+                      <button
+                        className="copy-verdict"
+                        disabled={!ready}
+                        onClick={() => setChatStack(st)}
+                        title={ready ? "chat with the model on this rig" : "wait for CREATE_COMPLETE"}
+                      >
+                        CHAT →
+                      </button>
+                      <button className="aws-alt" onClick={() => void doTeardown(st.name)} disabled={busy === "teardown"}>
+                        tear down
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
               <button className="aws-alt aws-disconnect" onClick={() => setSession(null)}>
                 disconnect (keeps the stack role in your account)
               </button>
@@ -393,6 +428,10 @@ export function AwsConnect({
 
           {error && <p className="note error">{error}</p>}
         </div>
+      )}
+
+      {chatStack && session && (
+        <ChatDrawer sessionId={session.sessionId} stack={chatStack} onClose={() => setChatStack(null)} />
       )}
     </section>
   );

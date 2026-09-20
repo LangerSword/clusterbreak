@@ -22,6 +22,7 @@ const SECTIONS: { group: string; items: { id: string; label: string }[] }[] = [
       { id: "deploy", label: "Deploy kit" },
       { id: "connect", label: "Connect your account" },
       { id: "provision", label: "Provision & teardown" },
+      { id: "chat", label: "Chat & harness" },
     ],
   },
   {
@@ -330,6 +331,13 @@ export function Docs() {
               Instance Requests” (a few hours, usually approved). CPU-only rigs need no quota.
             </div>
             <p>
+              <strong>Sessions persist in this browser</strong> (localStorage), so a refresh keeps you
+              connected. The rig list itself is re-read from your account on every load — so after
+              reconnecting from another browser or device, the same running rigs appear and can be torn down
+              from there. Disconnecting only forgets the session id; the role stays in your account until you
+              delete the connect stack.
+            </p>
+            <p>
               <strong>Auto-teardown is on by default (6 hours).</strong> An EventBridge sweep runs every 15
               minutes and deletes expired stacks through the same assumed role — server-side, so it works even
               if you close the tab. You can also tear down manually from the panel's{" "}
@@ -344,6 +352,48 @@ export function Docs() {
               <code>aws cloudformation deploy</code> in whichever account you like. The template is the product;
               the connect flow is just the convenience layer on top of it.
             </div>
+          </section>
+
+          <section id="chat">
+            <h2>Chat &amp; harness</h2>
+            <p>
+              Once a stack reports <code>CREATE_COMPLETE</code>, its rig card grows a{" "}
+              <strong>CHAT →</strong> button. That opens a drawer that talks to the llama.cpp server running on
+              your instance — real inference on your hardware, from the browser.
+            </p>
+            <p>
+              The browser never calls the instance directly. It posts to Clusterbreak's{" "}
+              <code>POST /aws/chat</code>, which assumes your connect role, reads the endpoint from the stack
+              outputs, and forwards the request with the rig's bearer key. Two reasons that shape matters:
+              a page on HTTPS cannot call <code>http://…:8080</code> (mixed content), and the key should not
+              live in a web page.
+            </p>
+            <div className="callout warn">
+              <b>Two honest limits</b>
+              The API gateway closes the connection at 30 seconds, so replies are capped (128–512 tokens) —
+              fine for a GPU rig, tight for CPU-only. And nothing is streamed: you get the whole answer at once.
+              A rig that is still downloading the GGUF or loading it into VRAM will return a real error saying
+              so, not a fake reply.
+            </div>
+            <h3>Point any harness at the rig</h3>
+            <p>
+              Every rig gets its own <code>cbk-…</code> bearer key, generated server-side and never written into
+              the page. The drawer's harness section reveals it on demand and gives you a paste-ready
+              environment:
+            </p>
+            <pre><code>{`OPENAI_BASE_URL=http://<node-ip>:8080/v1
+OPENAI_API_KEY=cbk-…
+OPENAI_MODEL=local`}</code></pre>
+            <p>
+              That works with opencode, the OpenAI SDKs, LiteLLM, or anything else that speaks the OpenAI chat
+              API. Port 8080 is reachable from anywhere <em>because the key is the gate</em> — which is also why
+              the deploy template refuses to leave it empty. SSH stays pinned to the CIDR you typed.
+            </p>
+            <p>
+              <strong>Cost note:</strong> the instance bills until it is torn down. Auto-teardown (1/6/24h) is
+              enforced server-side by an EventBridge sweep, and the rig card's{" "}
+              <code>tear down</code> button deletes the stack immediately.
+            </p>
           </section>
 
           <section id="data">

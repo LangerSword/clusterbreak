@@ -115,6 +115,63 @@ export function teardownRig(sessionId: string, stackName: string): Promise<{ sta
   return post<{ stackName: string; status: string }>("/aws/teardown", { sessionId, stackName });
 }
 
+export interface RigStack {
+  name: string;
+  status: string;
+  createdAt: string | null;
+  outputs: Record<string, string>;
+  teardownAt: number | null;
+  apiKey: string | null;
+  mine: boolean;
+}
+
+/**
+ * Every clusterbreak-* stack in the connected account — the account is the
+ * source of truth, so a page refresh (or a different browser) still sees the
+ * rigs that are running and can tear them down.
+ */
+export async function listStacks(sessionId: string): Promise<{ accountId: string; stacks: RigStack[] }> {
+  const res = await fetch(`${API_BASE}/aws/stacks/${encodeURIComponent(sessionId)}`);
+  const data = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    error?: string;
+    detail?: string;
+    accountId?: string;
+    stacks?: RigStack[];
+  };
+  if (!res.ok || data.ok === false) {
+    throw new Error(data.detail ? `${data.error}: ${data.detail}` : (data.error ?? `http ${res.status}`));
+  }
+  return { accountId: data.accountId ?? "", stacks: data.stacks ?? [] };
+}
+
+export interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface ChatReply {
+  reply: string;
+  model?: string;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+}
+
+/** Chat with the model running on a provisioned rig, proxied over HTTPS. */
+export function chatWithRig(
+  sessionId: string,
+  stackName: string,
+  messages: ChatMessage[],
+  maxTokens = 256,
+): Promise<ChatReply> {
+  return post<ChatReply>("/aws/chat", { sessionId, stackName, messages, maxTokens });
+}
+
+/** OpenAI-compatible endpoint + key for pointing any harness at the rig. */
+export function harnessEnv(endpoint: string, apiKey: string | null): string {
+  const base = endpoint.replace(/\/+$/, "");
+  return `OPENAI_BASE_URL=${base}/v1\nOPENAI_API_KEY=${apiKey ?? "<api-key>"}\nOPENAI_MODEL=${base.includes(":8080") ? "local" : "local"}`;
+}
+
 /** A fresh per-user secret for the connect stack's trust policy. */
 export function generateExternalId(): string {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";

@@ -68,8 +68,15 @@ describe("deploy kit", () => {
     expect(yaml).toContain('Environment=CTX=${ContextTokens}');
     expect(yaml).toContain("Default: 4096");
     expect(yaml).toContain('MODEL_URL="${ModelUrl}"');
-    // GPU bootstrap must handle the nouveau→nvidia transition with a reboot
-    expect(yaml).toContain("blacklist nouveau");
+    // GPU nodes use the Deep Learning base AMI (driver preinstalled): no
+    // userdata driver install, no nouveau blacklist, no mid-bootstrap restart
+    expect(yaml).toContain("base-oss-nvidia-driver-gpu-ubuntu-24.04");
+    expect(yaml).not.toContain("blacklist nouveau");
+    expect(yaml).not.toContain("ubuntu-drivers install");
+    expect(yaml).toContain("IsGpu: !Equals [!Ref GpuMode, gpu]");
+    // the unit must survive slow starts and show failures on the EC2 console
+    expect(yaml).toContain("Restart=on-failure");
+    expect(yaml).toContain("StandardOutput=journal+console");
     expect(yaml).toContain("clusterbreak-llama.service");
     expect(yaml).toContain("nvidia-smi -L");
     expect(yaml).toContain("Node2Endpoint");
@@ -89,5 +96,28 @@ describe("deploy kit", () => {
       rigLabel: "empty",
     });
     expect(yaml).toContain("Default: cpu");
+  });
+
+  it("gates the endpoint with a per-stack bearer key and documents harness use", () => {
+    const plan = planDeploy([device("rtx3090_24gb")]);
+    const yaml = buildTemplate({
+      plan,
+      model: model("llama3.1_8b"),
+      quant: "q4_k_m",
+      contextTokens: 4096,
+      rigLabel: "chat-test",
+    });
+    // the key parameter must be NoEcho (never echoed back in stack events)
+    expect(yaml).toContain("ApiKey:");
+    expect(yaml).toMatch(/ApiKey:\n(?:.*\n)*?\s+NoEcho: true/);
+    // llama.cpp must actually require it, and the unit must pass it through
+    expect(yaml).toContain('API_FLAG="--api-key $API_KEY"');
+    expect(yaml).toContain("Environment=API_KEY=${ApiKey}");
+    // 8080 is open on purpose (key is the gate); SSH stays pinned to SshCidr
+    expect(yaml).toContain("FromPort: 8080, ToPort: 8080, CidrIp: 0.0.0.0/0");
+    expect(yaml).toContain("FromPort: 22, ToPort: 22, CidrIp: !Ref SshCidr");
+    // harness output so the endpoint can be used from any OpenAI-compatible client
+    expect(yaml).toContain("Harness:");
+    expect(yaml).toContain("OPENAI_BASE_URL=http://${Node1.PublicIp}:8080/v1");
   });
 });
