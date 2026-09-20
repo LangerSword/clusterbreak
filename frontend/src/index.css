@@ -113,6 +113,35 @@ body {
   background-clip: text;
   color: transparent;
 }
+a.brand-name:hover {
+  text-decoration: none;
+  filter: brightness(1.15);
+}
+.brand-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+}
+.brand-nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--dim-2);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 3px 7px;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+.brand-nav a:hover {
+  color: var(--text);
+  border-color: var(--line-2);
+  background: rgba(255, 255, 255, 0.03);
+  text-decoration: none;
+}
 .brand-tag {
   color: var(--dim-2);
   font-size: 0.7rem;
@@ -1004,6 +1033,17 @@ button:disabled {
   letter-spacing: 0.22em;
   color: var(--accent);
   margin-bottom: 10px;
+}
+.shared-home {
+  display: block;
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--dim-2);
+  text-decoration: none;
+}
+.shared-home:hover {
+  color: var(--text);
 }
 .shared-cta {
   display: inline-block;

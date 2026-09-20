@@ -340,6 +340,49 @@ input:focus-visible {
   gap: var(--s8);
   align-items: center;
 }
+/* the rig diagram, animated, behind the hero — masked so it never fights text */
+/* pointer-tracked spotlight — subtle, only on hover-capable pointers */
+.hero-spot {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    520px circle at var(--mx, 50%) var(--my, 40%),
+    rgba(103, 232, 249, 0.09),
+    transparent 62%
+  );
+}
+.hero-topology {
+  position: absolute;
+  right: -4%;
+  top: 2%;
+  width: min(760px, 62vw);
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 0;
+  -webkit-mask-image: radial-gradient(ellipse 72% 66% at 62% 42%, #000 30%, transparent 78%);
+  mask-image: radial-gradient(ellipse 72% 66% at 62% 42%, #000 30%, transparent 78%);
+}
+.topo-figure {
+  margin: 0 0 var(--s6);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(18, 22, 27, 0.6), rgba(11, 13, 16, 0.6));
+}
+.topo-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.topo-figure figcaption {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim-2);
+  padding: 9px 12px;
+  border-top: 1px solid var(--line);
+}
 .eyebrow {
   display: inline-flex;
   align-items: center;
@@ -762,11 +805,12 @@ input:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--mono);
-  font-size: 15px;
   border: 1px solid var(--line);
   background: var(--glow-bg, rgba(103, 232, 249, 0.1));
   color: var(--glow-fg, var(--cyan));
+}
+.bento-icon svg {
+  display: block;
 }
 .bento-card h3 {
   font-size: 17px;
@@ -1418,10 +1462,13 @@ input:focus-visible {
 
 /* ---------- responsive ---------- */
 @media (max-width: 1120px) {
-  .hero-inner {
-    grid-template-columns: 1fr;
-    gap: var(--s7);
-  }
+.hero-topology {
+  display: none;
+}
+.hero-inner {
+  grid-template-columns: 1fr;
+  gap: var(--s7);
+}
   .cell.wide,
   .cell.half {
     grid-column: span 12;

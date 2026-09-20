@@ -20,6 +20,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,9 +45,17 @@ def check(name: str, ok: bool, detail: str = "") -> None:
 
 
 def fetch(path: str, base: str = BASE) -> str:
-    req = urllib.request.Request(base + path, headers={"user-agent": "clusterbreak-grader"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return r.read().decode("utf-8", errors="replace")
+    """Fetch with retries — campus DNS/edge flakes must not read as site failures."""
+    last: Exception | None = None
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(base + path, headers={"user-agent": "clusterbreak-grader"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return r.read().decode("utf-8", errors="replace")
+        except Exception as e:  # noqa: BLE001
+            last = e
+            time.sleep(1.5 * (attempt + 1))
+    raise last  # type: ignore[misc]
 
 
 def find_asset(html: str, pattern: str) -> str | None:
@@ -59,10 +68,63 @@ def has_canonical(html: str, path: str) -> bool:
     return f'rel="canonical" href="{BASE}{path}"' in html
 
 
+# The bundler wraps JSX string props in EITHER " or ` depending on the minifier
+# pass. A detector that only knows one form is blind to the shipped format, and
+# its negative control can pass for the wrong reason (found in run 12: three
+# detectors missed real markup, and the stat control only "worked" because the
+# planted fake used the other quote style).
+# A quote delimiter in the minified bundle. Built as a literal two-character
+# class, and every detector spells its string patterns out per quote style
+# instead of interpolating into a class — a class built from a variable was
+# malformed (an escaped backslash leaked in) and silently matched nothing.
+D = '["`]'
+QUOTES = ('"', "`")
+
+
+# The one stat slot that is a CLAIM rather than a measurement: planning costs
+# nothing because it never leaves the browser. It is allowed explicitly (and is
+# the only entry) so the rule stays strict for numbers — a count typed into a
+# stat slot is still drift and still fails.
+CLAIM_LITERALS = ("$0",)
+
+
 def hardcoded_stat_numbers(js: str) -> list[str]:
-    """Stat values must be expressions, never string/number literals.
-    Matches the minified JSX form className:"stat-num",children:<literal>."""
-    return re.findall(r'stat-num",children:(?:"[^"]+"|\d)', js)
+    """Stat values must be computed, never typed — in either quote style.
+
+    Matches the minified JSX form className:`stat-num`,children:<literal>.
+    Numbers and strings are drift; the documented claim literals are allowed."""
+    hits = re.findall(rf"stat-num{D},children:\d", js)
+    for q in QUOTES:
+        hits += re.findall(rf"stat-num{D},children:{q}[^{q}]{{1,24}}{q}", js)
+    return [h for h in hits if not any(claim in h for claim in CLAIM_LITERALS)]
+
+
+def emoji_glyphs_in_icon_slots(js: str) -> list[str]:
+    """Bento icons must be drawn SVG, never a typed glyph in the icon slot."""
+    hits: list[str] = []
+    for q in QUOTES:
+        hits += re.findall(rf"bento-icon{D},children:{q}([^{q}]{{1,4}}){q}", js)
+    return hits
+
+
+def topology_reference(js: str) -> list[str]:
+    """The hero asset must actually be referenced by the landing bundle."""
+    return re.findall(rf"[:=]{D}(/rig-topology\.svg){D}", js)
+
+
+def svg_is_animated(svg: str) -> tuple[bool, str]:
+    """An animated diagram must carry its own keyframes + a reduced-motion guard."""
+    frames = len(re.findall(r"@keyframes", svg))
+    flow = "stroke-dashoffset" in svg
+    guard = "prefers-reduced-motion" in svg
+    return (frames >= 4 and flow and guard), f"{frames} keyframes, flow={flow}, reduced-motion={guard}"
+
+
+def home_link_in_app(js: str) -> bool:
+    """The simulator must offer a way back to the landing page."""
+    nav = re.search(rf"className:{D}brand-nav{D}", js)
+    brand = re.search(rf"className:{D}brand-name{D},href:{D}/{D}", js)
+    return bool(nav and brand)
 
 
 def main() -> int:
@@ -84,6 +146,8 @@ def main() -> int:
     docs_assets = re.findall(r'/assets/[A-Za-z0-9_-]+\.js', docs_html)
     landing_js = "".join(fetch(p) for p in dict.fromkeys(landing_assets)) if landing_assets else ""
     docs_js = "".join(fetch(p) for p in dict.fromkeys(docs_assets)) if docs_assets else ""
+    app_assets = re.findall(r'/assets/[A-Za-z0-9_-]+\.js', app_html)
+    app_js = "".join(fetch(p) for p in dict.fromkeys(app_assets)) if app_assets else ""
     if landing_js_path and not landing_assets:
         landing_js = fetch(landing_js_path)
     if docs_js_path and not docs_assets:
@@ -109,8 +173,11 @@ def main() -> int:
     print("== D2: no hardcoded stat numbers (drift class) ==")
     bad = hardcoded_stat_numbers(landing_js)
     check("landing stats are computed, not typed", not bad, f"literals: {bad}")
-    # negative control: the detector must catch a planted literal
-    CONTROLS.append(("hardcoded stat literal detected", bool(hardcoded_stat_numbers('x:className:"stat-num",children:"99"'))))
+    # negative controls: BOTH shipped quote styles must be caught, and a bare
+    # number must be caught — otherwise the detector is blind to the real format
+    CONTROLS.append(("typed stat literal detected (backtick form)", bool(hardcoded_stat_numbers("className:`stat-num`,children:15"))))
+    CONTROLS.append(("typed stat literal detected (quote form)", bool(hardcoded_stat_numbers('className:"stat-num",children:"99"'))))
+    CONTROLS.append(("typed stat number detected even beside the claim allowance", bool(hardcoded_stat_numbers("className:`stat-num`,children:`$0`}),(0,x.jsx)(`div`,{className:`stat-num`,children:7"))))
 
     print("== D3: docs endpoints == handler routes ==")
     handler = (ROOT / "backend" / "handler.py").read_text()
@@ -165,6 +232,45 @@ def main() -> int:
     check(f"all {len(table)} contract tokens match site.css", not drift, "; ".join(drift))
     CONTROLS.append(("token drift detected", bool([f"{t}" for t, h in [("--fake", "#000000")] if not re.search(r"--fake:\s*#000000", css)])))
 
+    print("== D9: hero assets + navigation (visual-dynamism batch) ==")
+    # the custom asset must be the one in the repo, served from the canonical host
+    repo_svg = (ROOT / "frontend" / "public" / "rig-topology.svg").read_text()
+    try:
+        live_svg = fetch("/rig-topology.svg")
+        check(
+            "hero topology asset is served and identical to the repo file",
+            live_svg.strip() == repo_svg.strip(),
+            f"deployed {len(live_svg)}B vs repo {len(repo_svg)}B",
+        )
+    except Exception as e:  # noqa: BLE001
+        live_svg = ""
+        check("hero topology asset is served and identical to the repo file", False, str(e))
+    animated, why = svg_is_animated(live_svg)
+    check("topology carries real animation + a reduced-motion guard", animated, why)
+    refs = topology_reference(landing_js)
+    check("landing bundle references the hero asset", bool(refs), "no /rig-topology.svg in shipped chunks")
+
+    # icons: drawn, not typed
+    glyphs = emoji_glyphs_in_icon_slots(landing_js)
+    check("bento icon slots hold no typed glyphs", not glyphs, f"glyphs: {glyphs}")
+    drawn = re.search(r"M12 2\.6 20\.2 7v10L12 21\.4", landing_js)  # MarkIcon path, minifier-stable
+    check("hand-authored mark ships in the bundle", bool(drawn), "mark path not found in shipped chunks")
+
+    # navigation: simulator -> home, landing -> simulator, shared report -> home
+    check("simulator offers a way home", home_link_in_app(app_js), "no brand-nav home link in app bundle")
+    check("simulator links to the docs page", "/docs.html" in app_js, "no docs link in app bundle")
+    check("shared report offers the way home", re.search(rf'className:{D}shared-home{D},href:{D}/{D}', app_js) is not None, "no shared-home link")
+    check("landing links into the simulator", "/app.html" in landing_js, "no /app.html in landing chunks")
+
+    # negative controls: each new detector must be able to fail
+    CONTROLS.append(("typed glyph in an icon slot detected (backtick form)", bool(emoji_glyphs_in_icon_slots("className:`bento-icon`,children:`⚡`"))))
+    CONTROLS.append(("typed glyph in an icon slot detected (quote form)", bool(emoji_glyphs_in_icon_slots('className:"bento-icon",children:"⚡"'))))
+    CONTROLS.append(("missing asset reference detected", not topology_reference("src:`/assets/main-x.js`")))
+    CONTROLS.append(("unanimated svg detected", not svg_is_animated("<svg><rect/></svg>")[0]))
+    CONTROLS.append(("missing home link detected", not home_link_in_app("className:`brand-name`,children:`CLUSTERBREAK`")))
+    CONTROLS.append(("asset reference found in shipped form", bool(topology_reference("className:`hero-topology`,src:`/rig-topology.svg`"))))
+    CONTROLS.append(("home link found in shipped form", home_link_in_app("className:`brand-nav`,children:[]}),(0,x.jsx)(`a`,{className:`brand-name`,href:`/`")))
+
     print("== D8: test suites ==")
     for pkg, expect in [("sim", None), ("frontend", None)]:
         out = subprocess.run(["npm", "test"], cwd=ROOT / pkg, capture_output=True, text=True, timeout=240)
@@ -195,7 +301,7 @@ def main() -> int:
     lines += [
         "",
         "## Scope honesty",
-        "- Graded: deployed page availability, shipped-data authenticity, no hardcoded stat literals, docs↔backend endpoint parity, grade-claim parity, engine markers, legacy link forwarding, DESIGN.md↔site.css token sync, both test suites.",
+        "- Graded: deployed page availability, shipped-data authenticity, no hardcoded stat literals, docs↔backend endpoint parity, grade-claim parity, engine markers, legacy link forwarding, DESIGN.md↔site.css token sync, hero asset integrity + animation honesty, icon/emoji parity, simulator↔landing navigation, both test suites.",
         "- Not graded here: visual quality (see the visual-QA audit + screenshots), Lighthouse/Core Web Vitals, screen-reader traversal.",
     ]
     (ROOT / "docs" / "grade-site.md").write_text("\n".join(lines) + "\n")

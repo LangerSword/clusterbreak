@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 460" width="720" height="460" role="img" aria-label="Cluster topology: three GPU nodes wired together, one unplugged mid-run">
+  <title>Cluster topology — three wired nodes, one unplugged</title>
+  <style>
+    .node { fill: #12161b; stroke: #26303b; stroke-width: 1.5; }
+    .node.nv { stroke: #76b900; }
+    .node.apple { stroke: #c3ccd8; }
+    .node.dead { stroke: #e05c5c; stroke-dasharray: 5 5; fill: #171214; }
+    .bar { stroke: #1d242c; stroke-width: 1.5; }
+    .bar-fill { stroke: #57d38c; stroke-width: 3; stroke-linecap: round; }
+    .bar-fill.warn { stroke: #e0b341; }
+    .bar-fill.dead { stroke: #e05c5c; }
+    .link { stroke: #26303b; stroke-width: 2; fill: none; }
+    .link.flow { stroke: #67e8f9; stroke-dasharray: 7 9; animation: flow 1.6s linear infinite; opacity: 0.85; }
+    .link.slow { stroke: #a78bfa; stroke-dasharray: 3 14; animation: flow 3.4s linear infinite; opacity: 0.8; }
+    .link.cut { stroke: #e05c5c; stroke-dasharray: 4 6; opacity: 0.75; }
+    .t { font-family: "JetBrains Mono", ui-monospace, monospace; fill: #98a0aa; font-size: 11px; letter-spacing: 0.06em; }
+    .t.dim { fill: #7a838d; font-size: 10px; }
+    .t.dead { fill: #e05c5c; }
+    .t.ok { fill: #57d38c; }
+    .pulse { fill: #67e8f9; }
+    .pulse.v { fill: #a78bfa; }
+    .pulse.r { fill: #e05c5c; }
+    @keyframes flow { to { stroke-dashoffset: -32; } }
+    @keyframes p1 { 0% { transform: translate(0,0); opacity: 0 } 10% { opacity: 1 } 90% { opacity: 1 } 100% { transform: translate(196px, 0); opacity: 0 } }
+    @keyframes p2 { 0% { transform: translate(0,0); opacity: 0 } 10% { opacity: 1 } 90% { opacity: 1 } 100% { transform: translate(0, 96px); opacity: 0 } }
+    @keyframes p3 { 0% { transform: translate(0,0); opacity: 0 } 10% { opacity: 1 } 90% { opacity: 1 } 100% { transform: translate(-196px, 0); opacity: 0 } }
+    @keyframes breathe { 0%, 100% { opacity: 1 } 50% { opacity: 0.55 } }
+    @keyframes blink { 0%, 100% { opacity: 1 } 50% { opacity: 0.25 } }
+    .a1 { animation: p1 2.6s ease-in-out infinite; }
+    .a2 { animation: p2 2.2s ease-in-out infinite; animation-delay: 0.6s; }
+    .a3 { animation: p3 3.1s ease-in-out infinite; animation-delay: 1.1s; }
+    .led { animation: breathe 2.4s ease-in-out infinite; }
+    .dead-led { animation: blink 1.1s steps(2, end) infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .link.flow, .link.slow, .a1, .a2, .a3, .led, .dead-led { animation: none; }
+      .a1, .a2, .a3 { opacity: 0; }
+    }
+  </style>
+
+  <!-- links first so nodes sit on top -->
+  <path class="link" d="M168 118 H364" />
+  <path class="link flow" d="M168 118 H364" />
+  <path class="link" d="M364 118 V214" />
+  <path class="link slow" d="M364 118 V214" />
+  <path class="link cut" d="M168 118 V214" />
+  <path class="link" d="M168 214 H364" />
+  <path class="link flow" d="M168 214 H364" />
+
+  <!-- travelling activations -->
+  <circle class="pulse a1" cx="172" cy="118" r="4" />
+  <circle class="pulse v a2" cx="364" cy="122" r="3.5" />
+  <circle class="pulse a3" cx="360" cy="214" r="4" />
+
+  <!-- node 1: RTX 3090 -->
+  <g>
+    <rect class="node nv" x="44" y="76" width="124" height="84" rx="12" />
+    <circle class="led" cx="60" cy="94" r="3.5" fill="#76b900" />
+    <text class="t" x="72" y="98">RTX 3090</text>
+    <text class="t dim" x="58" y="118">24 GB · 936 GB/s</text>
+    <line class="bar" x1="58" y1="134" x2="154" y2="134" />
+    <line class="bar-fill" x1="58" y1="134" x2="120" y2="134" />
+    <text class="t ok" x="58" y="152">111.7 tok/s</text>
+  </g>
+
+  <!-- node 2: M2 Ultra -->
+  <g>
+    <rect class="node apple" x="364" y="76" width="132" height="84" rx="12" />
+    <circle class="led" cx="380" cy="94" r="3.5" fill="#c3ccd8" />
+    <text class="t" x="392" y="98">M2 Ultra</text>
+    <text class="t dim" x="378" y="118">192 GB · 800 GB/s</text>
+    <line class="bar" x1="378" y1="134" x2="480" y2="134" />
+    <line class="bar-fill" x1="378" y1="134" x2="412" y2="134" />
+    <text class="t ok" x="378" y="152">76.3 tok/s</text>
+  </g>
+
+  <!-- node 3: unplugged 3090 -->
+  <g>
+    <rect class="node dead" x="44" y="214" width="124" height="84" rx="12" />
+    <circle class="dead-led" cx="60" cy="232" r="3.5" fill="#e05c5c" />
+    <text class="t" x="72" y="236">RTX 3090</text>
+    <text class="t dim" x="58" y="256">24 GB · unplugged</text>
+    <line class="bar" x1="58" y1="272" x2="154" y2="272" />
+    <line class="bar-fill dead" x1="58" y1="272" x2="96" y2="272" />
+    <text class="t dead" x="58" y="290">0 tok/s</text>
+  </g>
+
+  <!-- node 4: the survivor pair -->
+  <g>
+    <rect class="node" x="364" y="214" width="132" height="84" rx="12" />
+    <circle class="led" cx="380" cy="232" r="3.5" fill="#67e8f9" />
+    <text class="t" x="392" y="236">+1 node</text>
+    <text class="t dim" x="378" y="256">wired · 10 GbE</text>
+    <line class="bar" x1="378" y1="272" x2="480" y2="272" />
+    <line class="bar-fill" x1="378" y1="272" x2="462" y2="272" />
+    <text class="t" x="378" y="290">pipeline 13.2 tok/s</text>
+  </g>
+
+  <!-- link labels -->
+  <text class="t dim" x="222" y="110">10 GbE</text>
+  <text class="t dim" x="372" y="170">1 GbE</text>
+  <text class="t dead" x="104" y="196">link cut</text>
+  <text class="t dim" x="222" y="206">KV cache 12.4 / 24 GB</text>
+
+  <!-- caption -->
+  <text class="t dim" x="44" y="336">a rig mid-break · the run died, the postmortem names the cause</text>
+  <text class="t dim" x="44" y="356">every number here is fitted from published measurements</text>
+</svg>

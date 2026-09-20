@@ -1,4 +1,5 @@
 import type { Model, Quant } from "../sim";
+import { IconDocs, IconHome } from "../site/icons";
 
 const CONTEXTS = [512, 1024, 4096, 8192, 16384, 32768];
 
@@ -30,8 +31,20 @@ export function TopBar(p: Props) {
   return (
     <header className="topbar">
       <div className="brand">
-        <span className="brand-name">CLUSTERBREAK</span>
+        <a className="brand-name" href="/" title="back to clusterbreak.langersword.in">
+          CLUSTERBREAK
+        </a>
         <span className="brand-tag">build a rig · run a model · break it</span>
+        <nav className="brand-nav" aria-label="Site">
+          <a href="/" title="home">
+            <IconHome size={15} />
+            <span>home</span>
+          </a>
+          <a href="/docs.html" title="documentation">
+            <IconDocs size={15} />
+            <span>docs</span>
+          </a>
+        </nav>
       </div>
       <div className="controls">
         <label>

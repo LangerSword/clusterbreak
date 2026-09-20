@@ -41,6 +41,9 @@ export function SharedReport({ id }: { id: string }) {
           <a className="shared-cta" href={base}>
             build your own rig →
           </a>
+          <a className="shared-home" href="/">
+            or read how it works
+          </a>
         </div>
       </div>
     );
@@ -88,6 +91,9 @@ export function SharedReport({ id }: { id: string }) {
         </p>
         <a className="shared-cta" href={base}>
           build your own rig →
+        </a>
+        <a className="shared-home" href="/">
+          or read how it works
         </a>
       </div>
     </div>
