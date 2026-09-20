@@ -4,15 +4,13 @@
 
 Built solo for **First Commit** (WeMakeDevs × AWS Builder Center), **Ship It** track.
 
-**Live:** https://clusterbreak.langersword.in
+**Live:** [clusterbreak.langersword.in](https://clusterbreak.langersword.in)
 
-**Code:** https://github.com/LangerSword/clusterbreak
+**Code:** [github.com/LangerSword/clusterbreak](https://github.com/LangerSword/clusterbreak)
 
 ![Clusterbreak landing page](https://clusterbreak.langersword.in/shots/landing-hero.png)
 
 *The landing page — the hero instrument runs the real engine, not a mockup.*
-
----
 
 ## The question every local-AI build starts with
 
@@ -26,16 +24,12 @@ The engine is dependency-free TypeScript and runs entirely in your browser. It m
 
 ### Where the numbers come from
 
-| Figure | Source |
-| --- | --- |
-| Model sizes | Hugging Face API — exact GGUF blob sizes, verified |
-| Decode efficiency | Fitted from published measurements across **15 devices** |
-| Context limits | Each model's own GGUF metadata (`gguf.context_length`) |
-| Prices | AWS Pricing API snapshot, timestamped in the UI |
+- **Model sizes** — Hugging Face API, exact GGUF blob sizes, verified
+- **Decode efficiency** — fitted from published measurements across **15 devices**
+- **Context limits** — each model's own GGUF metadata (`gguf.context_length`)
+- **Prices** — AWS Pricing API snapshot, timestamped in the UI
 
 Where there is no measurement, the UI marks the value with a `~` and says *"no published measurement"* — a default parameter is never dressed up as data.
-
----
 
 ## Then you break it
 
@@ -44,8 +38,6 @@ Unplug a node mid-generation, cut the interconnect, cap VRAM. The postmortem doe
 ![The postmortem](https://clusterbreak.langersword.in/shots/postmortem.png)
 
 *What died, why, and what to change — the causal chain, not just a red box.*
-
----
 
 ## Taking the same rig to AWS
 
@@ -76,8 +68,6 @@ Once connected, the app provisions the rig you simulated, lists your running rig
 
 Tear it down when you are done, and a scheduled sweep kills anything you forget.
 
----
-
 ## What actually fought back
 
 Every one of these was invisible to unit tests. They only appeared against real AWS, on a real GPU, with real latency — which is the argument for deploying while you build.
@@ -98,8 +88,6 @@ Every one of these was invisible to unit tests. They only appeared against real 
 
 Ask a quantized LLM what GPU it is on and it will confidently invent one — an 8B told me **A100** while running on an **A10G**. The chat proxy now prepends the model's real deployment facts (region, instance type, GPU, weights file, context window), read from the CloudFormation stack itself. Ask it now and it answers *"I am running on an NVIDIA A10G with 24 GB of VRAM."*
 
----
-
 ## The AWS open-source stack
 
 The template is generated in TypeScript and validated as a **shipped artifact** with **cfn-lint** (AWS Labs):
@@ -119,18 +107,16 @@ The backend is Python on **boto3** (STS, CloudFormation, EC2, DynamoDB), and the
 
 **Services used:** S3, CloudFront, ACM, API Gateway, Lambda, DynamoDB, CloudFormation, IAM, STS, EC2 (`g5.xlarge`), EventBridge, Systems Manager, CloudWatch.
 
----
-
 ## Try it
 
-1. **Simulate** — build a rig, break it, share the report: https://clusterbreak.langersword.in/app.html
+1. **Simulate** — build a rig, break it, share the report: [clusterbreak.langersword.in/app.html](https://clusterbreak.langersword.in/app.html)
 
 2. **Deploy** — generate the template from the same board, or connect your account and provision the rig for real.
 
 3. **Verify** — the repo ships the graders: engine tests against measured anchors, a deployed-site grader with negative controls, and browser suites that drive provision → chat → teardown against live AWS.
 
-**Live:** https://clusterbreak.langersword.in
+**Live:** [clusterbreak.langersword.in](https://clusterbreak.langersword.in)
 
-**Code:** https://github.com/LangerSword/clusterbreak
+**Code:** [github.com/LangerSword/clusterbreak](https://github.com/LangerSword/clusterbreak)
 
 If you want to argue with the numbers, the repo has the data pipeline that produced them and the graders that check the deployed site against it. That seemed more useful than a screenshot of a dashboard.
