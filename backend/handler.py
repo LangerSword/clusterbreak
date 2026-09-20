@@ -26,7 +26,7 @@ import urllib.error
 import urllib.request
 
 SERVICE = "clusterbreak-api"
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 TABLE_NAME = os.environ.get("RUNS_TABLE", "clusterbreak-runs")
 SESSIONS_TABLE_NAME = os.environ.get("SESSIONS_TABLE", "clusterbreak-sessions")
 REGION = os.environ.get("AWS_REGION", "ap-south-1")
@@ -672,6 +672,17 @@ MAX_CHAT_TOKENS = 768
 ROLES = {"system", "user", "assistant"}
 
 
+# What each EC2 GPU class actually carries. The same mapping the deploy kit uses
+# (deploy/cfn.ts -> instanceForDevice) so the model's self-description matches the
+# product's own documentation instead of a guess.
+GPU_BY_INSTANCE = {
+    "g5.xlarge": "NVIDIA A10G, 24 GB VRAM",
+    "g5.2xlarge": "NVIDIA A10G, 24 GB VRAM",
+    "g4dn.xlarge": "NVIDIA T4, 16 GB VRAM",
+    "g6e.xlarge": "NVIDIA L40S, 48 GB VRAM",
+}
+
+
 def _with_deployment_facts(messages, stack, outputs):
     """Put the model's real deployment facts in front of it.
 
@@ -691,9 +702,11 @@ def _with_deployment_facts(messages, stack, outputs):
     ]
     itype = outputs.get("Node1InstanceType")
     facts.append(
-        f"Your instance type: {itype} (NVIDIA GPU)." if itype
+        f"Your instance type: {itype}." if itype
         else "Your exact instance type is not exposed by this stack — do not guess it."
     )
+    if itype in GPU_BY_INSTANCE:
+        facts.append(f"Your GPU: {GPU_BY_INSTANCE[itype]}.")
     if ctx:
         facts.append(f"Context window: {ctx} tokens.")
     facts.append(
