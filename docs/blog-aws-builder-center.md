@@ -72,15 +72,15 @@ Tear it down when you are done, and a scheduled sweep kills anything you forget.
 
 Every one of these was invisible to unit tests. They only appeared against real AWS, on a real GPU, with real latency — which is the argument for deploying while you build.
 
-- **CloudFormation keeps a failed stack's name forever.** After a `CREATE_FAILED` the name can never be reused, and the API's only signal is `stack_exists` — which tells you nothing about whether the stack is live, failed or mid-delete. I built dead-stack detection, cleanup and automatic client retry around it.
+- **CloudFormation keeps a failed stack's name forever.** After a `CREATE_FAILED` the name can never be reused, and the API's only signal is `stack_exists` — which tells you nothing about whether the stack is live, failed or mid-delete. I built stale-stack detection, cleanup and automatic client retry around it.
 
 - **Two system messages break a chat template.** The proxy prepends the model's real deployment facts; the UI seeded its own system prompt. Together: two system messages in a row, and Gemma's template rejects the request with *"Conversation roles must alternate user/assistant"*. The fix was normalizing the message list before it goes upstream.
 
-- **The Deep Learning AMI already ships `containerd.io`.** Installing `docker.io` on top aborts the whole apt transaction, and under `set -e` the bootstrap died silently at 88 seconds. The DLAMI's 75 GB snapshot is also larger than the default 60 GB root volume, which fails at launch.
+- **The Deep Learning AMI already ships `containerd.io`.** Installing `docker.io` on top aborts the whole apt transaction, and under `set -e` the bootstrap failed silently at 88 seconds. The DLAMI's 75 GB snapshot is also larger than the default 60 GB root volume, which fails at launch.
 
 - **Lambda's default timeout is shorter than a CloudFormation create.** API Gateway closes the request at 30 seconds; a GPU stack takes longer. The proxy keeps a wait budget and the UI retries itself. Chat replies are capped for the same reason — for long generations the panel hands you an OpenAI-compatible endpoint to point a harness at.
 
-- **My own teardown sweep deleted a freshly created rig.** A stale session record still owned the stack name, so the sweep saw an expired timer and killed the new instance. The sweep now never deletes a stack created after its timer was set.
+- **My own teardown sweep deleted a freshly created rig.** A stale session record still owned the stack name, so the sweep saw an expired timer and deleted the new instance. The sweep now never deletes a stack created after its timer was set.
 
 - **The connect role needed permissions I did not expect.** The paginated stack listing needs `cloudformation:ListStacks` — a different action from `DescribeStacks` — and `ec2:DescribeKeyPairs` is not implied by anything else.
 
