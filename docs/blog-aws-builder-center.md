@@ -6,9 +6,9 @@ Built solo for **First Commit** (WeMakeDevs × AWS Builder Center), **Ship It** 
 
 **Live:** [clusterbreak.langersword.in](https://clusterbreak.langersword.in)
 
-**Code:** [github.com/LangerSword/clusterbreak](https://github.com/LangerSword/clusterbreak)
+**Code:** [Project Link](https://github.com/LangerSword/clusterbreak)
 
-![Clusterbreak landing page](https://clusterbreak.langersword.in/shots/landing-hero.png)
+**[ IMAGE 1 — the landing page: click Insert image here and upload 1-landing-hero.png ]**
 
 *The landing page — the hero instrument runs the real engine, not a mockup.*
 
@@ -16,7 +16,7 @@ Built solo for **First Commit** (WeMakeDevs × AWS Builder Center), **Ship It** 
 
 *Will my machine actually run this model?* The honest answer is scattered across benchmark repos, spreadsheets and vibes. Clusterbreak makes the physics visible: place devices on a 3D board, wire the nodes together, pick a model and a quantization, and run it.
 
-![The rig board](https://clusterbreak.langersword.in/shots/board.png)
+**[ IMAGE 2 — the rig board: click Insert image here and upload 2-rig-board.png ]**
 
 *Build the rig from real hardware cards — GPUs, Macs, laptops, a Steam Deck, CPU-only.*
 
@@ -35,7 +35,7 @@ Where there is no measurement, the UI marks the value with a `~` and says *"no p
 
 Unplug a node mid-generation, cut the interconnect, cap VRAM. The postmortem does not just say *failed* — it traces the failure back to the exact constraint that produced it: memory, bandwidth, interconnect or compute. The report is a shareable link.
 
-![The postmortem](https://clusterbreak.langersword.in/shots/postmortem.png)
+**[ IMAGE 3 — the postmortem: click Insert image here and upload 3-postmortem.png ]**
 
 *What died, why, and what to change — the causal chain, not just a red box.*
 
@@ -43,7 +43,7 @@ Unplug a node mid-generation, cut the interconnect, cap VRAM. The postmortem doe
 
 From the same board, Clusterbreak generates a **real CloudFormation template** for NVIDIA cards: one node per GPU, launched from the **Deep Learning base AMI** so CUDA is already installed, llama.cpp in Docker behind a per-stack API key, with the model pulled from Hugging Face in userdata.
 
-![The AWS panel — connect and provision](https://clusterbreak.langersword.in/shots/aws-panel.png)
+**[ IMAGE 4 — the AWS panel: click Insert image here and upload 4-aws-panel.png ]**
 
 *Connect your own account, then provision the rig you simulated.*
 
@@ -62,7 +62,7 @@ The role is **read-wide, write-narrow**: it can describe stack state, but it can
 
 Once connected, the app provisions the rig you simulated, lists your running rigs from the account itself, and lets you **prompt the model on your own instance** from the browser:
 
-![Chatting with the model on the provisioned rig](https://clusterbreak.langersword.in/shots/rig-chat.png)
+**[ IMAGE 5 — chat with the model on the rig: click Insert image here and upload 5-chat-with-rig.png ]**
 
 *The model on a real `g5.xlarge`, answering about VRAM limits — and naming its own 24 GB of VRAM from the stack's facts.*
 
@@ -117,6 +117,6 @@ The backend is Python on **boto3** (STS, CloudFormation, EC2, DynamoDB), and the
 
 **Live:** [clusterbreak.langersword.in](https://clusterbreak.langersword.in)
 
-**Code:** [github.com/LangerSword/clusterbreak](https://github.com/LangerSword/clusterbreak)
+**Code:** [Project Link](https://github.com/LangerSword/clusterbreak)
 
 If you want to argue with the numbers, the repo has the data pipeline that produced them and the graders that check the deployed site against it. That seemed more useful than a screenshot of a dashboard.
