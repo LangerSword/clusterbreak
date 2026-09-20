@@ -18,9 +18,10 @@ export function ChatDrawer({
   stack: RigStack;
   onClose: () => void;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "system", content: "You are running on a Clusterbreak-provisioned EC2 instance. Answer concisely." },
-  ]);
+  // No seeded system prompt: the proxy prepends the model's real deployment
+  // facts (instance type, GPU, weights file), and two system messages in a row
+  // break strict chat templates.
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +97,12 @@ export function ChatDrawer({
               <div className="msg-body">{m.content}</div>
             </div>
           ))}
+          {visible.length === 0 && !busy && (
+            <p className="note">
+              This talks to the model on your own EC2 instance. Ask it about its hardware — the proxy tells
+              it where it actually runs, so it answers from the stack instead of guessing.
+            </p>
+          )}
           {busy && (
             <div className="msg assistant">
               <span className="msg-role">rig</span>

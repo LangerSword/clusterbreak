@@ -26,7 +26,7 @@ import urllib.error
 import urllib.request
 
 SERVICE = "clusterbreak-api"
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 TABLE_NAME = os.environ.get("RUNS_TABLE", "clusterbreak-runs")
 SESSIONS_TABLE_NAME = os.environ.get("SESSIONS_TABLE", "clusterbreak-sessions")
 REGION = os.environ.get("AWS_REGION", "ap-south-1")
@@ -683,6 +683,31 @@ GPU_BY_INSTANCE = {
 }
 
 
+def _normalize_messages(msgs):
+    """Collapse a message list into the shape every chat template accepts.
+
+    A client may seed its own system prompt while the proxy also prepends the
+    real deployment facts — two system messages in a row, which strict templates
+    (Gemma's, for one) reject with "Conversation roles must alternate
+    user/assistant", a 400 the user can do nothing about. So: drop empty turns,
+    merge same-role neighbours, and make sure the list opens with the system
+    preamble followed by a user turn.
+    """
+    merged = []
+    for m in msgs:
+        content = (m.get("content") or "").strip()
+        if not content:
+            continue
+        if merged and merged[-1]["role"] == m["role"]:
+            merged[-1]["content"] += "\n\n" + content
+        else:
+            merged.append({"role": m["role"], "content": content})
+    head = 1 if merged and merged[0]["role"] == "system" else 0
+    while len(merged) > head and merged[head]["role"] != "user":
+        merged.pop(head)
+    return merged
+
+
 def _with_deployment_facts(messages, stack, outputs):
     """Put the model's real deployment facts in front of it.
 
@@ -765,7 +790,7 @@ def _post_chat(event):
     headers = {"content-type": "application/json"}
     if api_key:
         headers["authorization"] = f"Bearer {api_key}"
-    payload = {"messages": _with_deployment_facts(clean, st, outputs),
+    payload = {"messages": _normalize_messages(_with_deployment_facts(clean, st, outputs)),
                "max_tokens": max_tokens, "temperature": 0.7, "stream": False}
     req = urllib.request.Request(
         endpoint.rstrip("/") + "/v1/chat/completions",
