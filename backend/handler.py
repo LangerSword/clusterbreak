@@ -26,7 +26,7 @@ import urllib.error
 import urllib.request
 
 SERVICE = "clusterbreak-api"
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 TABLE_NAME = os.environ.get("RUNS_TABLE", "clusterbreak-runs")
 SESSIONS_TABLE_NAME = os.environ.get("SESSIONS_TABLE", "clusterbreak-sessions")
 REGION = os.environ.get("AWS_REGION", "ap-south-1")
@@ -667,9 +667,41 @@ def _api_key_for_stack(stack_name):
     return None
 
 
-CHAT_TIMEOUT_S = 25
-MAX_CHAT_TOKENS = 512
+CHAT_TIMEOUT_S = 26
+MAX_CHAT_TOKENS = 768
 ROLES = {"system", "user", "assistant"}
+
+
+def _with_deployment_facts(messages, stack, outputs):
+    """Put the model's real deployment facts in front of it.
+
+    A quantized LLM cannot inspect its host, so asked "what GPU are you on?" it
+    answers with the most likely-sounding chip in its training data — an 8B here
+    confidently claimed A100 while running on an A10G. These facts are read from
+    the CloudFormation stack itself, so the model answers from truth (and says
+    "I can't know that" when it genuinely cannot) instead of inventing hardware.
+    """
+    params = {p.get("ParameterKey"): p.get("ParameterValue") for p in stack.get("Parameters", [])}
+    model_file = (params.get("ModelUrl") or "").rsplit("/", 1)[-1]
+    ctx = params.get("ContextTokens") or ""
+    facts = [
+        "You are a quantized language model served by llama.cpp, running on an EC2 GPU instance"
+        f" that Clusterbreak provisioned in AWS region {REGION}.",
+        f"Your weights file: {model_file or 'not reported by this stack'}.",
+    ]
+    itype = outputs.get("Node1InstanceType")
+    facts.append(
+        f"Your instance type: {itype} (NVIDIA GPU)." if itype
+        else "Your exact instance type is not exposed by this stack — do not guess it."
+    )
+    if ctx:
+        facts.append(f"Context window: {ctx} tokens.")
+    facts.append(
+        "You have no internet access, no tools, and no way to inspect the host beyond this message."
+        " If asked about your hardware, environment or capabilities, answer from these facts and say"
+        " plainly when something is not knowable to you — never invent a GPU model or a spec."
+    )
+    return [{"role": "system", "content": " ".join(facts)}] + messages
 
 
 def _post_chat(event):
@@ -699,9 +731,9 @@ def _post_chat(event):
             return _response(400, {"ok": False, "error": "message_too_long", "detail": "4000 chars max"})
         clean.append({"role": m["role"], "content": m["content"]})
     try:
-        max_tokens = int(body.get("maxTokens", 256))
+        max_tokens = int(body.get("maxTokens", 512))
     except (TypeError, ValueError):
-        max_tokens = 256
+        max_tokens = 512
     max_tokens = max(16, min(MAX_CHAT_TOKENS, max_tokens))
 
     try:
@@ -720,7 +752,8 @@ def _post_chat(event):
     headers = {"content-type": "application/json"}
     if api_key:
         headers["authorization"] = f"Bearer {api_key}"
-    payload = {"messages": clean, "max_tokens": max_tokens, "temperature": 0.7, "stream": False}
+    payload = {"messages": _with_deployment_facts(clean, st, outputs),
+               "max_tokens": max_tokens, "temperature": 0.7, "stream": False}
     req = urllib.request.Request(
         endpoint.rstrip("/") + "/v1/chat/completions",
         data=json.dumps(payload).encode(),

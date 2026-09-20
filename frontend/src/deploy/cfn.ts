@@ -374,6 +374,9 @@ Outputs:${outputs}
   Harness:
     Description: Point any OpenAI-compatible client at the endpoint (key from the Clusterbreak panel)
     Value: !Sub "OPENAI_BASE_URL=http://\${Node1.PublicIp}:8080/v1 OPENAI_API_KEY=<api-key>"
+  Node1InstanceType:
+    Description: What Node1 actually is - the chat proxy tells the model this so it can answer truthfully
+    Value: "${nodes[0]?.instanceType ?? "unknown"}"
   Teardown:
     Description: Remove everything (stops all billing)
     Value: !Sub "aws cloudformation delete-stack --stack-name \${AWS::StackName} --region \${AWS::Region}"

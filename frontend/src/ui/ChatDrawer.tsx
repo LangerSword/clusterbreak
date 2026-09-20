@@ -137,6 +137,7 @@ export function ChatDrawer({
                 <option value={128}>128</option>
                 <option value={256}>256</option>
                 <option value={512}>512</option>
+                <option value={768}>768</option>
               </select>
             </label>
             <button className="copy-verdict" onClick={() => void send()} disabled={busy || !input.trim()}>
@@ -144,8 +145,10 @@ export function ChatDrawer({
             </button>
           </div>
           <p className="note">
-            Proxied through the Clusterbreak API — your browser never holds the instance key. Responses are
-            capped ({maxTokens} tokens) because the API gateway closes at 30s; CPU-only rigs will hit that wall.
+            Proxied through the Clusterbreak API — your browser never holds the instance key. Replies are
+            capped at {maxTokens} tokens because the API gateway closes at 30s (for longer generations, point a
+            harness at the endpoint below). The proxy also tells the model its real deployment facts — instance
+            type, model file, region — so asking it where it runs gets an answer instead of a guess.
           </p>
         </div>
 
