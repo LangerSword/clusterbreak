@@ -4,5 +4,7 @@ export * from "./fit";
 export * from "./pipeline";
 export * from "./run";
 export * from "./calibrate";
+export * from "./context";
+export { MODEL_CONTEXT, maxContextTokens } from "./data/model-context";
 export { DEVICES, DEFAULT_DECODE_EFFICIENCY } from "./data/devices";
 export { MODELS } from "./data/models";

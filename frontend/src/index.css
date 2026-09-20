@@ -165,6 +165,18 @@ a.brand-name:hover {
   letter-spacing: 0.14em;
   color: var(--dim);
 }
+/* the context select's cost/verdict line (KV cache, or why a window is refused) */
+.controls label .ctx-hint {
+  font-size: 0.58rem;
+  letter-spacing: 0.02em;
+  color: var(--dim-2);
+  white-space: nowrap;
+}
+@media (max-width: 1180px) {
+  .controls label .ctx-hint {
+    display: none;
+  }
+}
 select {
   background: var(--panel-2);
   color: var(--text);

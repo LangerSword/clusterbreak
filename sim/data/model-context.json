@@ -1,0 +1,46 @@
+{
+  "retrieved": "2026-09-20T17:09:15Z",
+  "method": "Hugging Face model API ?expand[]=gguf -> gguf.context_length, per repo in model-sizes.json. This is the model's own GGUF metadata (the field llama.cpp reads from the file header), so it is what a provisioned instance can load.",
+  "models": {
+    "qwen3.5_4b": {
+      "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
+      "contextLength": 262144,
+      "architecture": "qwen35"
+    },
+    "llama3.1_8b": {
+      "repo": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+      "contextLength": 131072,
+      "architecture": "llama"
+    },
+    "gemma3_27b": {
+      "repo": "bartowski/google_gemma-3-27b-it-GGUF",
+      "contextLength": 131072,
+      "architecture": "gemma3"
+    },
+    "qwen3_32b": {
+      "repo": "bartowski/Qwen_Qwen3-32B-GGUF",
+      "contextLength": 32768,
+      "architecture": "qwen3"
+    },
+    "qwen3.5_35b_a3b": {
+      "repo": "bartowski/Qwen_Qwen3.5-35B-A3B-GGUF",
+      "contextLength": 262144,
+      "architecture": "qwen35moe"
+    },
+    "llama3.3_70b": {
+      "repo": "bartowski/Llama-3.3-70B-Instruct-GGUF",
+      "contextLength": 131072,
+      "architecture": "llama"
+    },
+    "gpt_oss_120b": {
+      "repo": "bartowski/openai_gpt-oss-120b-GGUF",
+      "contextLength": 131072,
+      "architecture": "gpt-oss"
+    },
+    "minimax_m2.5": {
+      "repo": "ox-ox/MiniMax-M2.5-GGUF",
+      "contextLength": 196608,
+      "architecture": "minimax-m2"
+    }
+  }
+}

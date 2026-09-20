@@ -120,4 +120,39 @@ describe("deploy kit", () => {
     expect(yaml).toContain("Harness:");
     expect(yaml).toContain("OPENAI_BASE_URL=http://${Node1.PublicIp}:8080/v1");
   });
+
+  // The top bar's model + quant + context drive what the instance downloads.
+  // This is the guarantee behind the AWS panel's "this rig pulls …" line: if the
+  // selection stops reaching the template, the rig silently serves something else.
+  it("the template pulls the model + quant selected, never a default", () => {
+    const plan = planDeploy([device("rtx3090_24gb")]);
+    const small = model("qwen3.5_4b");
+    const big = model("gemma3_27b");
+    const yamlSmall = buildTemplate({ plan, model: small, quant: "q4_k_m", contextTokens: 1024, rigLabel: "x" });
+    const yamlBig = buildTemplate({ plan, model: big, quant: "q4_k_m", contextTokens: 1024, rigLabel: "x" });
+
+    expect(yamlSmall).toContain(modelUrl(small, "q4_k_m")!.url);
+    expect(yamlBig).toContain(modelUrl(big, "q4_k_m")!.url);
+    expect(yamlSmall).not.toEqual(yamlBig);
+    // quant is part of the pull, not just the model
+    const yamlQ8 = buildTemplate({ plan, model: big, quant: "q8_0", contextTokens: 1024, rigLabel: "x" });
+    expect(yamlQ8).toContain(modelUrl(big, "q8_0")!.url);
+    expect(yamlQ8).not.toContain(modelUrl(big, "q4_k_m")!.url);
+    // context follows the same dropdown (env var + parameter default + the header)
+    const yamlCtx = buildTemplate({ plan, model: small, quant: "q4_k_m", contextTokens: 8192, rigLabel: "x" });
+    expect(yamlCtx).toContain("Default: 8192");
+    expect(yamlCtx).toContain("Environment=CTX=${ContextTokens}");
+    expect(yamlCtx).toContain("@ 8192 ctx");
+    // and the header names the model + quant so the artifact is self-describing
+    expect(yamlSmall).toContain(`${small.name} Q4_K_M @ 1024 ctx`);
+  });
+
+  it("a model without a verified file leaves ModelUrl empty instead of inventing one", () => {
+    const plan = planDeploy([device("rtx3090_24gb")]);
+    const m = model("minimax_m2.5");
+    if (modelUrl(m, "q4_k_m")) return; // this model has a file; the invariant is about the ones that don't
+    const yaml = buildTemplate({ plan, model: m, quant: "q4_k_m", contextTokens: 1024, rigLabel: "x" });
+    expect(yaml).toContain('Default: ""');
+    expect(yaml).toContain("No verified file for this model in the dataset");
+  });
 });

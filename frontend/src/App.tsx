@@ -12,6 +12,7 @@ import {
   pipelineBreakdown,
   predictOomContext,
   usableMemoryGb,
+  contextOptions,
   type Device,
   type FitStatus,
   type PipelineEstimate,
@@ -406,7 +407,42 @@ export default function App() {
     return [...counts.entries()].map(([t, n]) => `${n} × ${t}`).join(" + ");
   }, [deploy]);
 
+  // Context windows the current model + board can actually take. An empty board
+  // gates nothing on memory (there is no rig yet) - only the model's own limit.
+  const ctxOptions = useMemo(
+    () => contextOptions(model, quant, cluster.totalUsableGb > 0 ? cluster.totalUsableGb : 1e6),
+    [model, quant, cluster.totalUsableGb],
+  );
+  // The control must never disagree with the state: if the current window is not
+  // on the list (a preset or a saved value that predates it) snap to the nearest
+  // valid one, and if the board shrank under a long window, move down to the
+  // longest window that still fits instead of showing one the rig cannot load.
+  useEffect(() => {
+    const cur = ctxOptions.find((o) => o.value === contextTokens);
+    const longest = [...ctxOptions].reverse().find((o) => !o.disabled);
+    if (!cur) {
+      const nearest = [...ctxOptions].reverse().find((o) => !o.disabled && o.value <= contextTokens);
+      const pick = nearest ?? longest;
+      if (pick && pick.value !== contextTokens) setContextTokens(pick.value);
+    } else if (cur.disabled && longest) {
+      setContextTokens(longest.value);
+    }
+  }, [ctxOptions, contextTokens]);
+
   const awsModelUrl = useMemo(() => modelUrl(model, quant)?.url ?? null, [model, quant]);
+  // What the provisioned instance will actually download. The top dropdowns drive
+  // this (and the template + the provision request both carry it), but until now
+  // nothing in the AWS panel said so out loud — you had to trust it.
+  const pullSummary = useMemo(
+    () => ({
+      model: model.name,
+      quant: quant.toUpperCase(),
+      gb: model.quantSizesGb[quant] ?? null,
+      ctx: contextTokens,
+      file: awsModelUrl ? awsModelUrl.split("/").pop() ?? null : null,
+    }),
+    [model, quant, contextTokens, awsModelUrl],
+  );
 
   const loadPreset = (p: Preset) => {
     run.stop();
@@ -437,6 +473,7 @@ export default function App() {
         models={models}
         quant={quant}
         contextTokens={contextTokens}
+        contextOptions={ctxOptions}
         linkMode={linkMode}
         nodeCount={rig.nodes.length}
         linkCount={rig.links.length}
@@ -506,6 +543,7 @@ export default function App() {
           awsTemplate={awsTemplate}
           awsPlanSummary={awsPlanSummary}
           awsModelUrl={awsModelUrl}
+          pullSummary={pullSummary}
           awsDefaultStackName={`clusterbreak-${(lastPreset ?? "custom-rig").slice(0, 24)}`}
           awsGpuMode={deploy && deploy.plan.entries.length > 0 ? gpuModeFor(deploy.plan) : "cpu"}
           onRemoveNode={(id) => {

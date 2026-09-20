@@ -29,6 +29,15 @@ The simulation engine reads these files at build time (`sim/src/data/*.ts` merge
 - Each device/model panel links its source; fitted panels quote the measured run ("fitted from measured 111.74 tok/s …").
 - Engine tests reproduce **15 measured anchors** within their published tolerance bands, including multi-node pipeline anchors.
 
+## Context windows (verified, per model)
+
+The context dropdown offers up to **128K**, and which options are live is arithmetic, not a taste setting:
+
+- **Source:** each model's own GGUF metadata via the Hugging Face API (`?expand[]=gguf` → `gguf.context_length`) — the same field llama.cpp reads from the file header. Fetched by `tools/refresh_context.py` into `sim/data/model-context.json`. Nothing here is estimated; a model with no verified row returns `null` and is not offered long windows.
+- **The figures differ per family** — Llama-3.1/3.3 and Gemma-3 and GPT-OSS say 131,072; Qwen3.5 (incl. the MoE) says 262,144; MiniMax-M2.5 says 196,608; **Qwen3-32B says 32,768**, so 64K/128K are refused for it and the UI names that limit.
+- **Memory gates the rest:** the KV cache for a window has to fit beside the weights. Gemma-3-27B at 128K costs 66.6 GB of KV (83.1 GB total) — offered on a 192 GB unified-memory rig, refused on a 24 GB card with *"needs 83.1 GB of memory"*. Every option carries its KV cost, and the app snaps off a window the current board cannot hold instead of displaying one.
+- **Fixed along the way:** presets shipped `contextTokens: 2048`, which was never in the fixed option list, so the control silently displayed 512 while the engine ran at 2048. 2048 is now a candidate and the control can no longer disagree with the state.
+
 ## Known gaps (honest list)
 
 - **No measured anchor yet** for: RTX 3050/3060/4060, laptop 5060, 5070, 5080, 5090, M1 Pro, M4 Max, Steam Deck, CPU baseline — these render as unverified estimates in-app. Sourcing queue: llama.cpp discussion #4167, LocalScore, vendor-published numbers.

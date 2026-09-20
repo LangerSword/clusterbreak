@@ -43,6 +43,7 @@ interface Props {
   awsTemplate: string | null;
   awsPlanSummary: string;
   awsModelUrl: string | null;
+  pullSummary: { model: string; quant: string; gb: number | null; ctx: number; file: string | null };
   awsDefaultStackName: string;
   awsGpuMode: "gpu" | "cpu";
   onRemoveNode: (id: string) => void;
@@ -74,6 +75,7 @@ export function Inspector({
   awsTemplate,
   awsPlanSummary,
   awsModelUrl,
+  pullSummary,
   awsDefaultStackName,
   awsGpuMode,
   onRemoveNode,
@@ -280,6 +282,7 @@ export function Inspector({
         template={awsTemplate}
         planSummary={awsPlanSummary}
         modelUrl={awsModelUrl}
+        pull={pullSummary}
         contextTokens={contextTokens}
         defaultStackName={awsDefaultStackName}
         gpuMode={awsGpuMode}

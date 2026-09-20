@@ -1,7 +1,5 @@
-import type { Model, Quant } from "../sim";
+import type { ContextOption, Model, Quant } from "../sim";
 import { IconDocs, IconHome } from "../site/icons";
-
-const CONTEXTS = [512, 1024, 4096, 8192, 16384, 32768];
 
 const QUANTS: { value: Quant; label: string }[] = [
   { value: "q4_k_m", label: "Q4_K_M" },
@@ -14,6 +12,8 @@ interface Props {
   models: Model[];
   quant: Quant;
   contextTokens: number;
+  /** Context windows with their per-option verdict from the engine. */
+  contextOptions: ContextOption[];
   linkMode: boolean;
   nodeCount: number;
   linkCount: number;
@@ -28,6 +28,7 @@ interface Props {
 
 export function TopBar(p: Props) {
   const model = p.models.find((m) => m.id === p.modelId);
+  const current = p.contextOptions.find((c) => c.value === p.contextTokens);
   return (
     <header className="topbar">
       <div className="brand">
@@ -70,15 +71,16 @@ export function TopBar(p: Props) {
             ))}
           </select>
         </label>
-        <label>
+        <label title={current?.hint}>
           CONTEXT
           <select value={p.contextTokens} onChange={(e) => p.onContext(Number(e.target.value))}>
-            {CONTEXTS.map((c) => (
-              <option key={c} value={c}>
-                {c >= 1024 ? `${c / 1024}K` : String(c)}
+            {p.contextOptions.map((c) => (
+              <option key={c.value} value={c.value} disabled={c.disabled} title={c.hint}>
+                {c.label}
               </option>
             ))}
           </select>
+          <span className="ctx-hint">{current?.hint}</span>
         </label>
         <button
           className="primary"

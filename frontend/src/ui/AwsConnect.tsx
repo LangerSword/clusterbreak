@@ -55,6 +55,8 @@ export interface AwsConnectProps {
   planSummary: string;
   /** Verified HF model URL to pull on the instance, when known. */
   modelUrl: string | null;
+  /** Exactly what the instance will download, straight from the top dropdowns. */
+  pull: { model: string; quant: string; gb: number | null; ctx: number; file: string | null };
   contextTokens: number;
   /** Default stack name suggestion, e.g. "clusterbreak-dual-3090". */
   defaultStackName: string;
@@ -65,6 +67,7 @@ export function AwsConnect({
   template,
   planSummary,
   modelUrl,
+  pull,
   contextTokens,
   defaultStackName,
   gpuMode,
@@ -454,6 +457,26 @@ export function AwsConnect({
                     </p>
                   )}
                   {notice && <p className={`note ${notice.kind === "warn" ? "error" : "good"}`}>{notice.text}</p>}
+                  {/* What this rig will pull — from the model + quant selected in the top bar. */}
+                  <p className={`note ${modelUrl ? "" : "error"}`}>
+                    {modelUrl ? (
+                      <>
+                        this rig pulls <b>{pull.model}</b> · {pull.quant}
+                        {pull.gb != null ? ` · ${pull.gb} GB` : ""} @ {pull.ctx.toLocaleString()} ctx
+                        {pull.file ? (
+                          <>
+                            {" "}
+                            <span className="pull-file">({pull.file})</span>
+                          </>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        no verified GGUF file for <b>{pull.model}</b> · {pull.quant} — pick another quant in the
+                        top bar, or the instance will have nothing to serve
+                      </>
+                    )}
+                  </p>
                   <button
                     className="copy-verdict aws-cta"
                     onClick={() => void doProvision()}
