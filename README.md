@@ -7,11 +7,14 @@ An interactive simulator for local AI inference clusters: assemble a virtual rig
 Everyone asks *"can my machines run this?"* — and the honest answer is scattered across benchmarks, spreadsheets and guesswork. Clusterbreak makes the physics visible: the limiting resource (VRAM, memory bandwidth, interconnect, compute), the causal chain, and the repair.
 
 ## Status
-Day 1 of a 4-day build (First Commit hackathon, Sep 17–20 2026). Repo history starts at kickoff; see `docs/event-log.md` for the build log.
+Built solo during **First Commit** (WeMakeDevs × AWS Builder Center, Sep 17–20 2026), shipped to the **Ship It** track. Repo history starts at kickoff — `docs/event-log.md` is the build log, including the bugs that only showed up against real AWS.
 
-**Live now:** https://clusterbreak.langersword.in — the interactive rig builder is up (place devices on the 3D board, wire them, get live tokens/s + fit verdicts) · `GET /health` on the API. The break-it scenarios land next.
+**Live:** https://clusterbreak.langersword.in
 
-**Also live:** connect your own AWS account with a scoped, revocable role (no keys change hands) and provision the rig you simulated — then **chat with the model running on it** from the browser, or point any OpenAI-compatible harness at the endpoint. Running rigs are listed from the account itself, so a refresh (or a different browser) still shows what's up and can tear it down.
+- **Simulate** — place devices on the 3D board, wire them, get live tokens/s, TTFT, memory-bandwidth and VRAM meters. Break-it scenarios included: unplug a node mid-generation, cut the interconnect, cap VRAM, mix architectures — each ends in a causal postmortem ("what died and why", traced to the constraint that produced it) with a shareable report.
+- **Deploy** — generate a real CloudFormation template for NVIDIA cards from the rig you built (validated with `cfn-lint` as a shipped artifact, priced from a vendored AWS Pricing API snapshot).
+- **Provision** — connect your own AWS account with a scoped, revocable role (**no keys change hands**: CloudFormation trust role + ExternalId, assumed via STS) and launch the rig you simulated on a real `g5.xlarge` (Deep Learning base AMI, llama.cpp in Docker behind a per-stack API key).
+- **Chat** — prompt the model running on that rig from the browser (server-side proxy; the key never reaches the client), or point any OpenAI-compatible harness at the endpoint. Rigs are listed from the account itself, so a refresh or another browser still sees what's up — with one-click teardown and a 15-minute sweep that kills anything forgotten.
 
 ## Architecture (v0)
 - `frontend/` — static SPA (Vite + React + TS); the simulator runs fully client-side
