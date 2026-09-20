@@ -89,10 +89,34 @@ export interface ProvisionResult {
   stackName: string;
   accountId: string;
   autoTeardownHours: number | null;
+  /** true when a failed/rolled-back stack holding this name was cleaned up first. */
+  replacedDeadStack?: boolean;
+  /** true when cleanup is still running — retry shortly. */
+  cleaningUp?: boolean;
+  detail?: string;
 }
 
 export function provisionRig(args: ProvisionArgs): Promise<ProvisionResult> {
   return post<ProvisionResult>("/aws/provision", args);
+}
+
+/** Key pair names in the connected account (dropdown instead of typing). */
+export async function listKeyPairs(sessionId: string): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/aws/keypairs/${encodeURIComponent(sessionId)}`);
+  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; keyPairs?: string[]; error?: string };
+  if (!res.ok || data.ok === false) throw new Error(data.error ?? `http ${res.status}`);
+  return data.keyPairs ?? [];
+}
+
+/** The caller's own public IP — prefills "<ip>/32" for the SSH rule. */
+export async function whoami(): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_BASE}/whoami`);
+    const data = (await res.json()) as { ip?: string | null };
+    return res.ok ? (data.ip ?? null) : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface StackStatus {
@@ -123,6 +147,10 @@ export interface RigStack {
   teardownAt: number | null;
   apiKey: string | null;
   mine: boolean;
+  /** False when the stack was not created by Clusterbreak (no key/timer on record). */
+  managed?: boolean;
+  /** Why the last attempt failed, when the stack is in a failed state. */
+  lastFailure?: string | null;
 }
 
 /**

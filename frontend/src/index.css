@@ -1285,6 +1285,22 @@ button:disabled {
 .rig-actions button {
   flex: 1;
 }
+.rig-dead {
+  border-left-color: var(--bad);
+  background: rgba(248, 113, 113, 0.05);
+}
+.rig-why {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  overflow-wrap: anywhere;
+}
+.aws-input.bad {
+  border-color: rgba(248, 113, 113, 0.6);
+}
+.note.good {
+  color: var(--ok);
+}
 
 /* ---------- chat drawer ---------- */
 .drawer-backdrop {

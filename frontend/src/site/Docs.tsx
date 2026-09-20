@@ -312,6 +312,14 @@ export function Docs() {
               ExternalId you pasted, and assumes the role on demand for the actions you trigger. To revoke
               everything: delete the connect stack in your account. There is no other switch, and no hidden one.
             </div>
+            <div className="callout">
+              <b>Reruns just work</b>
+              A stack that failed to create keeps its name in CloudFormation and refuses to be reused. Instead of
+              making you clean that up, provisioning detects a dead stack (<code>CREATE_FAILED</code>,{" "}
+              <code>ROLLBACK_COMPLETE</code>, a delete in flight), removes it, and retries on its own — the panel
+              says what it is doing while it happens. Failed rigs in the list also show the resource that failed
+              and why, and the form fills your key pair and IP for you.
+            </div>
           </section>
 
           <section id="provision">

@@ -122,3 +122,26 @@ Notes worth keeping:
 - Session ids persist in `localStorage` (per browser). The **rig list is re-fetched from AWS on every load**, so reconnecting — even from another device — shows the same running stacks and can tear them down. A cleared browser simply reconnects; nothing about the account changes.
 - The auto-teardown sweep only deletes a stack that already existed when its timer was set (`CreationTime > teardownAt` → skip), and a new provision takes ownership of a stack name from older session records. Both guards exist because a stale record once swept a rig that had just been re-created under the same name.
 - `session_not_found` on refresh is treated as "session expired", not an app error: the panel drops to the connect state and says so.
+
+## Rerun-proof provisioning (v0.6.0)
+
+`stack_exists` used to be a dead end: a stack that failed to create (or rolled back) keeps its name forever, CloudFormation refuses to reuse it, and the UI had nothing to offer. Now:
+
+- **Dead stacks are cleaned up automatically.** If the name is held by a stack in `CREATE_FAILED` / `ROLLBACK_COMPLETE` / `ROLLBACK_FAILED` / `DELETE_FAILED`, or one already `DELETE_IN_PROGRESS`, the backend removes it and re-creates in the same request (`replacedDeadStack: true`). If deletion is slower than the request's wait budget it returns `202 {"cleaningUp": true}` and the **UI retries itself** (4 attempts, 20s apart) instead of asking the user to press the button again — verified live.
+- **Live conflicts are explained.** A `409` carries the status, the teardown timer, and the way out (`tear down, or provision under a different name`); an in-progress create/update says so rather than "already exists".
+- **Failed rigs explain themselves.** `/aws/stacks` returns `lastFailure` (first failing resource reason), so the card shows *why* — e.g. `Node1: Volume of size 60GB is smaller than snapshot …`.
+- **Less typing:** the provision form offers a **key-pair dropdown** from your account (`GET /aws/keypairs/{session}`) and prefills the SSH CIDR with your own IP (`GET /whoami`), and it remembers key name / CIDR / pricing / timer between visits.
+
+### Connect-stack policy: read-wide, write-narrow
+
+The DeployRole could only describe `clusterbreak-*` stacks, so a rig created outside the app (manual `aws cloudformation deploy`) was **invisible while still blocking its own name**. v0.6.0 splits the policy:
+
+| Statement | Actions | Resource |
+|---|---|---|
+| `ReadStacks` | `DescribeStacks`, `DescribeStackEvents`, `DescribeStackResources`, `ListStacks` | `*` — read-only metadata (the paginated listing API is gated by `ListStacks`, not `DescribeStacks`) |
+| `Stacks` | `CreateStack`, `DeleteStack` | `clusterbreak-*` only — the boundary that matters |
+| `ReadEc2` | `DescribeKeyPairs`, `DescribeInstances`, `DescribeInstanceTypes` | `*` — read-only, powers the dropdown |
+
+**Existing connect stacks must be updated** for account-wide listing and the dropdown: re-run the same quick-create link (template URL is stable) or `aws cloudformation update-stack` with the current `connect/connect-role.yaml`. Until then the backend falls back to the names Clusterbreak recorded and reports `scopedListing: true` — it keeps working, just with less visibility.
+
+Also: the connect stack is excluded from the rig list (plumbing, not a rig), and rigs created outside Clusterbreak are marked `managed: false` — tear down works, chat is disabled because their bearer key is not on record.

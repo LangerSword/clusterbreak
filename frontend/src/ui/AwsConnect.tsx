@@ -3,9 +3,11 @@ import {
   connectAws,
   connectStackUrl,
   generateExternalId,
+  listKeyPairs,
   listStacks,
   provisionRig,
   teardownRig,
+  whoami,
   type AwsSession,
   type RigStack,
 } from "../api";
@@ -26,7 +28,15 @@ const SS = {
   ext: "cb.aws.externalId",
   session: "cb.aws.session",
   stack: "cb.aws.stackName",
+  keyName: "cb.aws.keyName",
+  sshCidr: "cb.aws.sshCidr",
+  mode: "cb.aws.mode",
+  teardown: "cb.aws.teardownHours",
 };
+
+const DEAD = /FAILED|ROLLBACK_COMPLETE/;
+const deadStack = (st: RigStack) => DEAD.test(st.status);
+const isDeleting = (st: RigStack) => /^DELETE/.test(st.status);
 
 const TERMINAL = /^(CREATE|UPDATE|DELETE)_(COMPLETE|FAILED|ROLLBACK_COMPLETE)$/;
 
@@ -74,15 +84,27 @@ export function AwsConnect({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const [keyName, setKeyName] = useState("");
-  const [sshCidr, setSshCidr] = useState("");
-  const [teardownHours, setTeardownHours] = useState(6);
-  const [mode, setMode] = useState<"on-demand" | "spot">("on-demand");
+  const [keyName, setKeyName] = useState(() => localStorage.getItem(SS.keyName) ?? "");
+  const [sshCidr, setSshCidr] = useState(() => localStorage.getItem(SS.sshCidr) ?? "");
+  const [teardownHours, setTeardownHours] = useState(() => Number(localStorage.getItem(SS.teardown) ?? 6));
+  const [mode, setMode] = useState<"on-demand" | "spot">(
+    () => (localStorage.getItem(SS.mode) as "on-demand" | "spot" | null) ?? "on-demand",
+  );
+  const [keyPairs, setKeyPairs] = useState<string[]>([]);
+  const [notice, setNotice] = useState<{ kind: "info" | "good" | "warn"; text: string } | null>(null);
   const [stackName, setStackName] = useState(() => localStorage.getItem(SS.stack) ?? defaultStackName);
   const [stacks, setStacks] = useState<RigStack[]>([]);
   const [chatStack, setChatStack] = useState<RigStack | null>(null);
 
   const pollRef = useRef<number | null>(null);
+  const retryRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (retryRef.current) window.clearTimeout(retryRef.current);
+    },
+    [],
+  );
 
   // keep the external id stable across reloads — it must match the deployed stack
   useEffect(() => {
@@ -101,6 +123,42 @@ export function AwsConnect({
   useEffect(() => {
     localStorage.setItem(SS.stack, stackName);
   }, [stackName]);
+
+  useEffect(() => {
+    localStorage.setItem(SS.keyName, keyName);
+  }, [keyName]);
+  useEffect(() => {
+    localStorage.setItem(SS.sshCidr, sshCidr);
+  }, [sshCidr]);
+  useEffect(() => {
+    localStorage.setItem(SS.mode, mode);
+  }, [mode]);
+  useEffect(() => {
+    localStorage.setItem(SS.teardown, String(teardownHours));
+  }, [teardownHours]);
+
+  // prefill the SSH rule with the caller's own IP (one less thing to look up)
+  useEffect(() => {
+    if (sshCidr) return;
+    void whoami().then((ip) => {
+      if (ip) setSshCidr(`${ip}/32`);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // key pairs come from the account, so the field can be a dropdown
+  useEffect(() => {
+    if (!session) {
+      setKeyPairs([]);
+      return;
+    }
+    void listKeyPairs(session.sessionId)
+      .then((names) => {
+        setKeyPairs(names);
+        setKeyName((cur) => (cur && names.includes(cur) ? cur : (names[0] ?? cur)));
+      })
+      .catch(() => setKeyPairs([]));
+  }, [session]);
 
   /** Re-read every clusterbreak-* stack from the account (source of truth). */
   const refresh = useCallback(async (sid: string, quiet = false) => {
@@ -167,10 +225,11 @@ export function AwsConnect({
     }
   };
 
-  const doProvision = async () => {
+  const doProvision = async (attempt = 0) => {
     if (!session || !template) return;
     setBusy("provision");
     setError(null);
+    if (attempt === 0) setNotice(null);
     try {
       const r = await provisionRig({
         sessionId: session.sessionId,
@@ -184,7 +243,24 @@ export function AwsConnect({
         modelUrl,
         autoTeardownHours: teardownHours,
       });
-      void r;
+      if (r.cleaningUp) {
+        // CloudFormation deletes slower than a single request allows, so we
+        // wait and retry ourselves instead of making the user press again.
+        const wait = 20;
+        if (attempt < 3) {
+          setNotice({
+            kind: "warn",
+            text: `${r.detail ?? "a previous stack with this name is still being cleaned up"} — retrying automatically in ${wait}s (attempt ${attempt + 2}/4)`,
+          });
+          retryRef.current = window.setTimeout(() => void doProvision(attempt + 1), wait * 1000);
+        } else {
+          setNotice({ kind: "warn", text: "still cleaning up — press provision once more in a minute" });
+        }
+      } else if (r.replacedDeadStack) {
+        setNotice({ kind: "good", text: "cleaned up a failed stack and started fresh — no manual cleanup needed" });
+      } else {
+        setNotice({ kind: "good", text: `provisioning ${r.stackName}…` });
+      }
       await refresh(session.sessionId, true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -208,6 +284,7 @@ export function AwsConnect({
   };
 
   const liveRigs = useMemo(() => stacks.filter((st) => !/^DELETE_COMPLETE/.test(st.status)), [stacks]);
+  const nameTaken = useMemo(() => liveRigs.find((st) => st.name === stackName), [liveRigs, stackName]);
 
   return (
     <section className="aws">
@@ -312,17 +389,27 @@ export function AwsConnect({
                   </div>
                   <div className="aws-grid">
                     <label className="aws-field">
-                      <span className="aws-label">key pair name</span>
-                      <input
-                        className="aws-input"
-                        placeholder="my-ec2-key"
-                        value={keyName}
-                        onChange={(e) => setKeyName(e.target.value)}
-                        spellCheck={false}
-                      />
+                      <span className="aws-label">key pair{keyPairs.length > 0 ? " (from your account)" : " name"}</span>
+                      {keyPairs.length > 0 ? (
+                        <select value={keyName} onChange={(e) => setKeyName(e.target.value)}>
+                          {keyPairs.map((k) => (
+                            <option key={k} value={k}>
+                              {k}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className="aws-input"
+                          placeholder="my-ec2-key"
+                          value={keyName}
+                          onChange={(e) => setKeyName(e.target.value)}
+                          spellCheck={false}
+                        />
+                      )}
                     </label>
                     <label className="aws-field">
-                      <span className="aws-label">ssh cidr</span>
+                      <span className="aws-label">ssh cidr (prefilled with your IP)</span>
                       <input
                         className="aws-input"
                         placeholder="1.2.3.4/32"
@@ -351,17 +438,25 @@ export function AwsConnect({
                     </label>
                   </div>
                   <label className="aws-field">
-                    <span className="aws-label">stack name</span>
+                    <span className="aws-label">stack name{nameTaken ? " — already in use" : ""}</span>
                     <input
-                      className="aws-input"
+                      className={`aws-input${nameTaken && !deadStack(nameTaken) ? " bad" : ""}`}
                       value={stackName}
                       onChange={(e) => setStackName(e.target.value.replace(/[^a-z0-9-]/g, ""))}
                       spellCheck={false}
                     />
                   </label>
+                  {nameTaken && (
+                    <p className={`note ${deadStack(nameTaken) ? "" : "error"}`}>
+                      {deadStack(nameTaken)
+                        ? "a failed attempt is holding this name — provisioning will clean it up and start fresh"
+                        : `${stackName} is already ${nameTaken.status.toLowerCase()} — tear it down, or pick another name`}
+                    </p>
+                  )}
+                  {notice && <p className={`note ${notice.kind === "warn" ? "error" : "good"}`}>{notice.text}</p>}
                   <button
                     className="copy-verdict aws-cta"
-                    onClick={doProvision}
+                    onClick={() => void doProvision()}
                     disabled={
                       busy === "provision" ||
                       !keyName.trim() ||
@@ -393,27 +488,37 @@ export function AwsConnect({
               {liveRigs.map((st) => {
                 const endpoint = st.outputs.Node1Endpoint ?? st.outputs.LlamaCppUrl ?? "";
                 const ready = st.status === "CREATE_COMPLETE";
+                const dead = deadStack(st);
                 return (
-                  <div className="rig" key={st.name}>
+                  <div className={`rig${dead ? " rig-dead" : ""}`} key={st.name}>
                     <div className="rig-head">
-                      <span className={`api-dot ${ready ? "up" : /FAILED|ROLLBACK/.test(st.status) ? "down" : "checking"}`} />
+                      <span className={`api-dot ${ready ? "up" : dead ? "down" : "checking"}`} />
                       <b className="rig-name">{st.name}</b>
                       <span className="rig-status">{st.status}</span>
                     </div>
                     <div className="rig-meta">
-                      {endpoint || "endpoint appears once the stack completes"} · {fmtTeardown(st.teardownAt)}
+                      {dead
+                        ? "failed attempt — this name is free once it is cleaned up (provisioning does it automatically)"
+                        : `${endpoint || "endpoint appears once the stack completes"} · ${fmtTeardown(st.teardownAt)}`}
                     </div>
+                    {dead && st.lastFailure && <p className="note error rig-why">{st.lastFailure}</p>}
                     <div className="rig-actions">
                       <button
                         className="copy-verdict"
-                        disabled={!ready}
+                        disabled={!ready || st.managed === false}
                         onClick={() => setChatStack(st)}
-                        title={ready ? "chat with the model on this rig" : "wait for CREATE_COMPLETE"}
+                        title={
+                          st.managed === false
+                            ? "created outside Clusterbreak — chat needs this rig's key, but tear down still works"
+                            : ready
+                              ? "chat with the model on this rig"
+                              : "wait for CREATE_COMPLETE"
+                        }
                       >
                         CHAT →
                       </button>
                       <button className="aws-alt" onClick={() => void doTeardown(st.name)} disabled={busy === "teardown"}>
-                        tear down
+                        {dead ? "clean up" : isDeleting(st) ? "deleting…" : "tear down"}
                       </button>
                     </div>
                   </div>

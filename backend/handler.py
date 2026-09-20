@@ -26,7 +26,7 @@ import urllib.error
 import urllib.request
 
 SERVICE = "clusterbreak-api"
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 TABLE_NAME = os.environ.get("RUNS_TABLE", "clusterbreak-runs")
 SESSIONS_TABLE_NAME = os.environ.get("SESSIONS_TABLE", "clusterbreak-sessions")
 REGION = os.environ.get("AWS_REGION", "ap-south-1")
@@ -40,6 +40,7 @@ STACK_RE = re.compile(r"^clusterbreak-[a-z0-9-]{3,40}$")
 ROLE_ARN_RE = re.compile(r"^arn:aws:iam::\d{12}:role/ClusterbreakDeployRole$")
 EXTERNAL_ID_RE = re.compile(r"^[A-Za-z0-9+/=_-]{16,64}$")
 EXEC_ROLE_NAME = "ClusterbreakStackRole"
+CONNECT_STACK_NAME = "clusterbreak-connect"
 TTL_DAYS = 90
 SESSION_TTL_HOURS = 24
 QUANTS = {"q4_k_m", "q8_0", "bf16"}
@@ -345,10 +346,11 @@ def _post_provision(event):
     if not (isinstance(teardown_hours, (int, float)) and 0 <= teardown_hours <= 168):
         return _response(400, {"ok": False, "error": "invalid_auto_teardown",
                                "detail": "hours, 0 = never, max 168"})
-    try:
-        session = _assume(item["roleArn"], item["externalId"])
-        cfn = session.client("cloudformation", region_name=REGION)
-        res = cfn.create_stack(
+    replaced_dead_stack = False
+    cleaning_up = False
+
+    def _create(cfn_):
+        return cfn_.create_stack(
             StackName=stack_name,
             TemplateBody=template,
             Parameters=params,
@@ -356,12 +358,71 @@ def _post_provision(event):
             OnFailure="DELETE",
             Tags=[{"Key": "created-by", "Value": "clusterbreak"}],
         )
+
+    try:
+        session = _assume(item["roleArn"], item["externalId"])
+        cfn = session.client("cloudformation", region_name=REGION)
+        res = _create(cfn)
     except Exception as e:
-        detail = str(e)[:200]
-        if "AlreadyExists" in str(e):
-            return _response(409, {"ok": False, "error": "stack_exists"})
-        print(f"provision failed: {e!r}", flush=True)
-        return _response(502, {"ok": False, "error": "provision_failed", "detail": detail})
+        if "AlreadyExists" not in str(e):
+            print(f"provision failed: {e!r}", flush=True)
+            return _response(502, {"ok": False, "error": "provision_failed", "detail": str(e)[:200]})
+        # The name is taken. A *dead* stack (failed create / rolled back) can
+        # never be updated and only blocks the name — clean it up and retry, so
+        # the user is not stuck retyping a stack name after a failed attempt.
+        existing = _describe_stack(cfn, stack_name) or {}
+        status = existing.get("StackStatus", "UNKNOWN")
+        if status.startswith("DELETE_"):
+            # Already on its way out: nothing to fix, just don't race it.
+            if _wait_stack_gone(cfn, stack_name, budget_s=18):
+                try:
+                    res = _create(cfn)
+                    replaced_dead_stack = True
+                except Exception as e3:
+                    return _response(502, {"ok": False, "error": "provision_failed", "detail": str(e3)[:200]})
+            else:
+                return _response(202, {"ok": True, "stackName": stack_name, "cleaningUp": True,
+                                       "detail": "a previous stack with this name is still being deleted; "
+                                                 "provisioning again in a moment will work"})
+        elif status in DEAD_STATES:
+            print(f"replacing dead stack {stack_name} ({status})", flush=True)
+            try:
+                cfn.delete_stack(StackName=stack_name)
+            except Exception as de:
+                return _response(502, {"ok": False, "error": "cleanup_failed", "detail": str(de)[:200]})
+            if not _wait_stack_gone(cfn, stack_name):
+                # Deletion is running but slower than our window; the account
+                # itself is now clean-ish, so tell the truth and let them retry.
+                cleaning_up = True
+                return _response(202, {"ok": True, "stackName": stack_name, "cleaningUp": True,
+                                       "detail": "removed a failed stack that was holding this name; "
+                                                 "give it a moment, then provision again"})
+            try:
+                res = _create(cfn)
+                replaced_dead_stack = True
+            except Exception as e2:
+                print(f"provision retry failed: {e2!r}", flush=True)
+                return _response(502, {"ok": False, "error": "provision_failed", "detail": str(e2)[:200]})
+        else:
+            # Genuinely live: name the conflict and the way out of it.
+            meta = {}
+            for s_item in _get_sessions().scan().get("Items", []):
+                if s_item.get("stackName") == stack_name:
+                    meta = s_item
+                    break
+            detail = f"a rig named {stack_name} already exists ({status})"
+            if status.startswith("CREATE_"):
+                detail += " — it is still being created, wait for it to finish"
+            elif status.startswith("UPDATE_"):
+                detail += " — an update is running, wait for it to finish"
+            else:
+                detail += " — tear it down, or provision under a different name"
+            return _response(409, {
+                "ok": False, "error": "stack_exists", "status": status, "detail": detail,
+                "accountId": item["accountId"],
+                "teardownAt": int(meta["teardownAt"]) if meta.get("teardownAt") else None,
+                "action": "teardown_or_rename",
+            })
     if teardown_hours <= 0:
         try:
             _get_sessions().update_item(
@@ -398,6 +459,7 @@ def _post_provision(event):
             print(f"teardown schedule failed: {e!r}", flush=True)
     return _response(202, {"ok": True, "stackId": res["StackId"], "stackName": stack_name,
                            "accountId": item["accountId"],
+                           "replacedDeadStack": replaced_dead_stack, "cleaningUp": cleaning_up,
                            "autoTeardownHours": teardown_hours or None})
 
 
@@ -457,6 +519,28 @@ def _post_teardown(event):
     return _response(200, {"ok": True, "stackName": stack_name, "status": "DELETE_IN_PROGRESS"})
 
 
+# Stacks in these states can never be updated and block reuse of their name.
+DEAD_STATES = ("CREATE_FAILED", "ROLLBACK_COMPLETE", "ROLLBACK_FAILED", "DELETE_FAILED")
+
+
+def _describe_stack(cfn, name):
+    try:
+        return cfn.describe_stacks(StackName=name)["Stacks"][0]
+    except Exception:
+        return None
+
+
+def _wait_stack_gone(cfn, name, budget_s=20):
+    """Bounded wait so a cleanup stays inside the API gateway's 30s window."""
+    deadline = time.time() + budget_s
+    while time.time() < deadline:
+        st = _describe_stack(cfn, name)
+        if st is None or st.get("StackStatus") == "DELETE_COMPLETE":
+            return True
+        time.sleep(2)
+    return False
+
+
 def _session_stacks(session_id):
     """The rigs Clusterbreak created in THIS account.
 
@@ -485,34 +569,92 @@ def _session_stacks(session_id):
         print(f"session scan failed: {e!r}", flush=True)
         return None, _response(503, {"ok": False, "error": "storage_unavailable"})
     stacks = []
-    if meta:
-        try:
-            session = _assume(item["roleArn"], item["externalId"])
-            cfn = session.client("cloudformation", region_name=REGION)
-        except Exception as e:
-            print(f"assume failed: {e!r}", flush=True)
-            return None, _response(403, {"ok": False, "error": "assume_failed"})
-        for name, m in meta.items():
+    scoped_listing = False
+    try:
+        session = _assume(item["roleArn"], item["externalId"])
+        cfn = session.client("cloudformation", region_name=REGION)
+    except Exception as e:
+        print(f"assume failed: {e!r}", flush=True)
+        return None, _response(403, {"ok": False, "error": "assume_failed"})
+    # Preferred: ask the account for every clusterbreak-* stack, so rigs created
+    # outside the app (manual deploys, older sessions) are visible and cleanable
+    # too — and so a failed stack cannot silently block its own name.
+    named = {}
+    try:
+        for page in cfn.get_paginator("describe_stacks").paginate():
+            for st in page.get("Stacks", []):
+                nm = st.get("StackName", "")
+                if nm == CONNECT_STACK_NAME:
+                    continue  # the connect stack is plumbing, not a rig
+                if STACK_RE.match(nm) and st.get("StackStatus") != "DELETE_COMPLETE":
+                    named[nm] = st
+    except Exception as e:
+        # Older connect stacks only permit describe-by-name; fall back to the
+        # names Clusterbreak recorded so this keeps working.
+        scoped_listing = True
+        print(f"account-wide listing unavailable ({e!r}); falling back to recorded names", flush=True)
+        for nm in meta:
             try:
-                st = cfn.describe_stacks(StackName=name)["Stacks"][0]
+                named[nm] = cfn.describe_stacks(StackName=nm)["Stacks"][0]
             except Exception:
-                continue  # deleted, or never created (failed provision) — not an error
+                continue
+    if named:
+        for name in named:
+            st = named[name]
+            m = meta.get(name, {})
             if st.get("StackStatus") == "DELETE_COMPLETE":
                 continue
+            last_failure = None
+            if str(st.get("StackStatus", "")).endswith(("FAILED", "ROLLBACK_COMPLETE")):
+                try:
+                    for ev in cfn.describe_stack_events(StackName=name)["StackEvents"]:
+                        if str(ev.get("ResourceStatus", "")).endswith("FAILED") and ev.get("ResourceStatusReason"):
+                            last_failure = f"{ev.get('LogicalResourceId')}: {ev['ResourceStatusReason']}"[:300]
+                            break
+                except Exception:
+                    pass
             stacks.append({
                 "name": name,
                 "status": st.get("StackStatus"),
+                "lastFailure": last_failure,
                 "createdAt": st.get("CreationTime").isoformat() if st.get("CreationTime") else None,
                 "outputs": {o["OutputKey"]: o["OutputValue"] for o in st.get("Outputs", [])},
-                "teardownAt": m["teardownAt"],
-                "apiKey": m["apiKey"],
-                "mine": m["mine"],
+                "teardownAt": m.get("teardownAt"),
+                "apiKey": m.get("apiKey"),
+                "mine": bool(m.get("mine")),
+                "managed": name in meta,
             })
     stacks.sort(key=lambda s: s.get("createdAt") or "", reverse=True)
     # must go through _response(): a bare dict skips the CORS headers, and the
     # browser then blocks the call ("blocked by CORS policy") while curl is
     # perfectly happy — found live, never by the API tests.
-    return _response(200, {"ok": True, "accountId": item["accountId"], "stacks": stacks}), None
+    return _response(200, {"ok": True, "accountId": item["accountId"], "stacks": stacks,
+                           "scopedListing": scoped_listing}), None
+
+
+def _get_keypairs(session_id):
+    """Key pair names in the user's account, so the UI can offer a dropdown
+    instead of asking them to remember an EC2 key name."""
+    item = _session_from(session_id)
+    if not item:
+        return _response(404, {"ok": False, "error": "session_not_found"})
+    try:
+        session = _assume(item["roleArn"], item["externalId"])
+        kps = session.client("ec2", region_name=REGION).describe_key_pairs()["KeyPairs"]
+    except Exception as e:
+        print(f"keypair listing failed: {e!r}", flush=True)
+        return _response(502, {"ok": False, "error": "keypairs_failed", "detail": str(e)[:200]})
+    return _response(200, {"ok": True, "keyPairs": sorted(k["KeyName"] for k in kps)})
+
+
+def _whoami(event):
+    """The caller's own source IP — used to prefill '<ip>/32' for SSH."""
+    ip = None
+    try:
+        ip = event.get("requestContext", {}).get("http", {}).get("sourceIp")
+    except Exception:
+        pass
+    return _response(200, {"ok": True, "ip": ip})
 
 
 def _api_key_for_stack(stack_name):
@@ -619,7 +761,7 @@ def route(method, path, event):
     if method == "GET" and path == "/health":
         return _response(200, {"ok": True, "service": SERVICE, "version": VERSION, "time": int(time.time())})
     if method == "GET" and path == "/":
-        return _response(200, {"ok": True, "service": SERVICE, "version": VERSION, "hint": "GET /health · POST /runs · GET /runs/{id} · POST /aws/connect · POST /aws/provision · GET /aws/status/{session}/{stack} · GET /aws/stacks/{session} · POST /aws/chat · POST /aws/teardown"})
+        return _response(200, {"ok": True, "service": SERVICE, "version": VERSION, "hint": "GET /health · POST /runs · GET /runs/{id} · POST /aws/connect · POST /aws/provision · GET /aws/status/{session}/{stack} · GET /aws/stacks/{session} · GET /aws/keypairs/{session} · GET /whoami · POST /aws/chat · POST /aws/teardown"})
     if method == "POST" and path == "/runs":
         return _post_runs(event)
     if method == "GET" and path.startswith("/runs/"):
@@ -640,6 +782,10 @@ def route(method, path, event):
         return err or payload
     if method == "POST" and path == "/aws/chat":
         return _post_chat(event)
+    if method == "GET" and path == "/whoami":
+        return _whoami(event)
+    if method == "GET" and path.startswith("/aws/keypairs/"):
+        return _get_keypairs(path[len("/aws/keypairs/"):])
     return _response(404, {"ok": False, "error": "not_found", "path": path})
 
 

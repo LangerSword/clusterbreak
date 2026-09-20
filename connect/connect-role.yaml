@@ -101,14 +101,27 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              # Read: every stack's metadata (the same thing you can already see
+              # in your own console) — without this, a clusterbreak-* stack
+              # created outside the app is invisible here and still blocks its
+              # own name forever.
+              - Sid: ReadStacks
+                Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResources
+                  # the paginated listing API (used to enumerate clusterbreak-*
+                  # stacks in the account) is gated by ListStacks, not DescribeStacks
+                  - cloudformation:ListStacks
+                Resource: "*"
+              # Write: only clusterbreak-* stacks. This is the boundary that
+              # matters — Clusterbreak can never touch anything else.
               - Sid: Stacks
                 Effect: Allow
                 Action:
                   - cloudformation:CreateStack
                   - cloudformation:DeleteStack
-                  - cloudformation:DescribeStacks
-                  - cloudformation:DescribeStackEvents
-                  - cloudformation:DescribeStackResources
                 Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/clusterbreak-*/*"
               - Sid: PassExecutionRole
                 Effect: Allow
@@ -119,6 +132,16 @@ Resources:
                 Action:
                   - servicequotas:GetServiceQuota
                   - servicequotas:ListServiceQuotas
+                Resource: "*"
+              # Read-only EC2 metadata so the UI can offer your key pairs in a
+              # dropdown and show what a rig is actually running (describe
+              # actions cannot be resource-scoped; nothing here can mutate).
+              - Sid: ReadEc2
+                Effect: Allow
+                Action:
+                  - ec2:DescribeKeyPairs
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceTypes
                 Resource: "*"
 
 Outputs:
